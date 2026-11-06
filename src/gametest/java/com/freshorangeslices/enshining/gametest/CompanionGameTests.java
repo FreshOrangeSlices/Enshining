@@ -124,4 +124,28 @@ public final class CompanionGameTests {
 		helper.assertTrue(noelle.getAttributeValue(Attributes.ATTACK_DAMAGE) == before + 4.0, "Half her 8 armor as attack");
 		helper.succeed();
 	}
+
+	@GameTest(template = "empty", timeoutTicks = 200)
+	public static void befriendedNoelleFightsAZombie(GameTestHelper helper) {
+		NoelleEntity noelle = helper.spawn(ModEntities.NOELLE.get(), new BlockPos(1, 2, 1));
+		noelle.befriend(player(helper));
+		Zombie zombie = helper.spawn(EntityType.ZOMBIE, new BlockPos(4, 2, 4));
+		zombie.setNoAi(true);
+		zombie.setPersistenceRequired();
+		float start = zombie.getHealth();
+		helper.succeedWhen(() -> {
+			helper.assertTrue(noelle.getTarget() == zombie, "Noelle targets the zombie: " + noelle.getTarget());
+			helper.assertTrue(zombie.getHealth() < start || !zombie.isAlive(), "And hits it");
+		});
+	}
+
+	@GameTest(template = "empty", timeoutTicks = 200)
+	public static void wildNoelleFightsBack(GameTestHelper helper) {
+		NoelleEntity noelle = helper.spawn(ModEntities.NOELLE.get(), new BlockPos(1, 2, 1));
+		Zombie zombie = helper.spawn(EntityType.ZOMBIE, new BlockPos(3, 2, 3));
+		zombie.setNoAi(true);
+		zombie.setPersistenceRequired();
+		noelle.hurt(helper.getLevel().damageSources().mobAttack(zombie), 1.0F);
+		helper.succeedWhen(() -> helper.assertTrue(noelle.getTarget() == zombie, "A wild Noelle hits back: " + noelle.getTarget()));
+	}
 }
