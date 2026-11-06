@@ -110,7 +110,9 @@ public final class CompanionGameTests {
 		noelle.useSkill(zombie);
 		helper.assertTrue(noelle.shieldActive(), "The shield is up");
 		helper.assertTrue(noelle.getAbsorptionAmount() > 0, "Absorption from Breastplate: " + noelle.getAbsorptionAmount());
-		helper.assertTrue(zombie.getHealth() < zombie.getMaxHealth(), "The stone armor bursting out hurt the zombie next to her");
+		helper.assertTrue(zombie.getHealth() < zombie.getMaxHealth(), "The stone armor bursting out hurt the zombie next to her: health " + zombie.getHealth() + "/" + zombie.getMaxHealth()
+				+ ", distance " + Math.sqrt(noelle.distanceToSqr(zombie)) + ", invulnerable " + zombie.isInvulnerable() + ", alive " + zombie.isAlive()
+				+ ", difficulty " + helper.getLevel().getDifficulty());
 		helper.succeed();
 	}
 
