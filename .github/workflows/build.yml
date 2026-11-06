@@ -90,15 +90,19 @@ jobs:
           distribution: 'microsoft'
       - name: dump GeckoLib classes
         run: |
-          url=$(curl -s https://api.modrinth.com/v2/version/aC5KMoNg | python3 -c "import json,sys;print(json.load(sys.stdin)['files'][0]['url'])")
+          set +e
+          curl -s https://api.modrinth.com/v2/version/aC5KMoNg > v.json
+          url=$(python3 -c "import json;print(json.load(open('v.json'))['files'][0]['url'])")
+          echo "$url"
           curl -sL "$url" -o geckolib.jar
-          unzip -l geckolib.jar | awk '{print $4}' | grep '\.class$' | grep -E 'GeoEntity|AnimatableInstanceCache|AnimationController|AnimatableManager|RawAnimation|PlayState|AnimationState|GeckoLibUtil|GeoEntityRenderer|DefaultedEntityGeoModel|GeoModel\.class' | grep -v '\$' > names.txt
+          unzip -l geckolib.jar | awk '{print $4}' | grep '\.class$' | grep -v '\$' | grep -E 'GeoEntity|AnimatableInstanceCache|AnimationController|AnimatableManager|RawAnimation|PlayState|AnimationState|GeckoLibUtil|GeoEntityRenderer|DefaultedEntityGeoModel|/GeoModel\.class|GeoAnimatable\.class' > names.txt
+          { echo "$url"; cat names.txt; } > dump.txt
           mkdir x && cd x && unzip -q ../geckolib.jar
-          { cat ../names.txt; for c in $(grep -E 'AnimationState|AnimationController\.class|GeoEntity\.class|GeoAnimatable\.class|RawAnimation' ../names.txt); do javap -cp . "${c%.class}" | grep -E 'public .*(isMoving|setAndContinue|triggerAnim|triggerableAnim|thenLoop|thenPlay|begin|registerControllers|getAnimatableInstanceCache|AnimationController\()'; done; } > ../dump.txt
+          for c in $(grep -E 'AnimationState|AnimationController\.class|GeoEntity\.class|GeoAnimatable\.class|RawAnimation|DefaultedEntityGeoModel' ../names.txt); do echo "== $c"; javap -cp . "${c%.class}" | grep -E 'public' | head -40; done >> ../dump.txt
           cd ..
           python3 - <<'PY2'
           t = open('dump.txt').read()
           esc = lambda s: s.replace('%', '%25').replace('\n', '%0A')
-          for n, c in enumerate([t[i:i+3900] for i in range(0, len(t), 3900)][:8]):
+          for n, c in enumerate([t[i:i+3900] for i in range(0, len(t), 3900)][:9]):
               print(f"::notice title=geckolib-{n:02d}::{esc(c)}")
           PY2
