@@ -2,6 +2,12 @@ package com.freshorangeslices.enshining.character.noelle;
 
 import com.freshorangeslices.enshining.core.CompanionEntity;
 import com.freshorangeslices.enshining.core.Element;
+import com.freshorangeslices.enshining.core.Fx;
+import net.minecraft.network.syncher.EntityDataAccessor;
+import net.minecraft.network.syncher.EntityDataSerializers;
+import net.minecraft.network.syncher.SynchedEntityData;
+import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.phys.Vec3;
 import java.util.UUID;
 import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.server.level.ServerLevel;
@@ -33,6 +39,7 @@ public class NoelleEntity extends CompanionEntity {
 	public static final int BURST_TICKS = 300;
 
 	private static final UUID BURST_ATTACK = UUID.fromString("5e3b1c2a-7d41-4c55-9a0e-0e1a1f000101");
+	private static final EntityDataAccessor<Boolean> SWEEPING = SynchedEntityData.defineId(NoelleEntity.class, EntityDataSerializers.BOOLEAN);
 	private static final RawAnimation SKILL = RawAnimation.begin().thenPlay("animation.noelle.skill");
 	private static final RawAnimation BURST = RawAnimation.begin().thenPlay("animation.noelle.burst");
 
@@ -81,6 +88,19 @@ public class NoelleEntity extends CompanionEntity {
 		return burstTicks > 0;
 	}
 
+	/** Sweeping Time is on: synced so clients draw her claymore bigger. */
+	public boolean sweeping() {
+		return entityData.get(SWEEPING);
+	}
+
+	@Override
+	protected void defineSynchedData() {
+		super.defineSynchedData();
+		entityData.define(SWEEPING, false);
+	}
+
+	// ---- Breastplate: stone armor that bursts out (Geo damage around her), shields her and her owner, heals on hits ----
+
 	@Override
 	public void useSkill(LivingEntity target) {
 		shieldTicks = SHIELD_TICKS;
@@ -89,23 +109,66 @@ public class NoelleEntity extends CompanionEntity {
 		if (owner != null && owner.distanceToSqr(this) < 16 * 16) {
 			shield(owner);
 		}
-		sound(SoundEvents.ANVIL_LAND, 0.35F, 1.6F);
+		geoBlast(3.0, 2.0F + (float) getAttributeValue(Attributes.ARMOR) * 0.4F);
+		if (level() instanceof ServerLevel server) {
+			Fx.shards(server, Blocks.GOLD_BLOCK.defaultBlockState(), position().add(0, 0.6, 0), 40, 0.8);
+			Fx.ring(server, element().dust(), position().add(0, 0.1, 0), 3.0, 48);
+		}
+		sound(SoundEvents.SHIELD_BLOCK, 1.0F, 0.7F);
+		sound(SoundEvents.AMETHYST_CLUSTER_PLACE, 1.0F, 0.8F);
 	}
 
 	private void shield(LivingEntity who) {
 		// No potion swirls (Absorption's are big and blue, right in the owner's face); the icon still shows it.
 		who.addEffect(new MobEffectInstance(MobEffects.ABSORPTION, SHIELD_TICKS, 1, false, false, true), this);
-		ring(element().dust(), who.getX(), who.getY() + 0.1, who.getZ(), 1.0, 24);
-		ring(element().dust(), who.getX(), who.getY() + 1.0, who.getZ(), 0.8, 16);
+		if (level() instanceof ServerLevel server) {
+			Fx.sphere(server, element().dust(), who.position().add(0, who.getBbHeight() / 2, 0), 1.1, 60);
+		}
 	}
+
+	private void shieldBreaks() {
+		if (level() instanceof ServerLevel server) {
+			Fx.shards(server, Blocks.GOLD_BLOCK.defaultBlockState(), position().add(0, 1, 0), 25, 0.5);
+			LivingEntity owner = getOwner();
+			if (owner != null && owner.distanceToSqr(this) < 16 * 16) {
+				Fx.shards(server, Blocks.GOLD_BLOCK.defaultBlockState(), owner.position().add(0, 1, 0), 25, 0.5);
+			}
+		}
+		sound(SoundEvents.AMETHYST_CLUSTER_BREAK, 1.0F, 0.9F);
+	}
+
+	// ---- Sweeping Time: a Geo blast, then 15 s of a bigger claymore, armor as attack and swings that hit all around ----
 
 	@Override
 	public void useBurst(LivingEntity target) {
 		burstTicks = BURST_TICKS;
-		double armor = getAttributeValue(Attributes.ARMOR);
-		setTransientAttack(armor * 0.5);
-		sound(SoundEvents.ANVIL_USE, 0.5F, 0.7F);
-		ring(element().dust(), getX(), getY() + 0.2, getZ(), 2.0, 40);
+		entityData.set(SWEEPING, true);
+		setTransientAttack(getAttributeValue(Attributes.ARMOR) * 0.5);
+		geoBlast(4.0, 4.0F + (float) getAttributeValue(Attributes.ARMOR) * 0.6F);
+		if (level() instanceof ServerLevel server) {
+			Vec3 at = position();
+			for (int i = 1; i <= 4; i++) {
+				Fx.ring(server, element().dust(), at.add(0, 0.15 * i, 0), i * 1.0, 20 + i * 10);
+			}
+			server.sendParticles(ParticleTypes.FLASH, at.x, at.y + 1, at.z, 1, 0, 0, 0, 0);
+			Fx.shards(server, Blocks.GOLD_BLOCK.defaultBlockState(), at.add(0, 0.5, 0), 60, 1.5);
+		}
+		sound(SoundEvents.RESPAWN_ANCHOR_CHARGE, 1.0F, 0.8F);
+		sound(SoundEvents.ANVIL_LAND, 0.6F, 0.6F);
+	}
+
+	private void endBurst() {
+		entityData.set(SWEEPING, false);
+		setTransientAttack(0);
+		sound(SoundEvents.BEACON_DEACTIVATE, 0.7F, 1.2F);
+	}
+
+	/** Geo damage to every enemy (not anyone's pet) within the radius. */
+	private void geoBlast(double radius, float damage) {
+		for (LivingEntity near : level().getEntitiesOfClass(LivingEntity.class, getBoundingBox().inflate(radius),
+				e -> e != this && e instanceof Enemy && e.isAlive() && !(e instanceof TamableAnimal pet && pet.isTame()))) {
+			near.hurt(damageSources().mobAttack(this), damage);
+		}
 	}
 
 	private void setTransientAttack(double amount) {
@@ -121,43 +184,76 @@ public class NoelleEntity extends CompanionEntity {
 
 	@Override
 	protected void onHit(LivingEntity target) {
+		ServerLevel server = level() instanceof ServerLevel s ? s : null;
+		// Every claymore hit: a heavy whoosh and a spark of impact.
+		sound(SoundEvents.PLAYER_ATTACK_STRONG, 0.8F, 0.75F);
+		if (server != null) {
+			server.sendParticles(ParticleTypes.CRIT, target.getX(), target.getY(0.6), target.getZ(), 8, 0.3, 0.3, 0.3, 0.2);
+		}
+
 		if (shieldActive() && random.nextBoolean()) {
 			heal(2.0F);
 			LivingEntity owner = getOwner();
 			if (owner != null && owner.distanceToSqr(this) < 16 * 16) {
 				owner.heal(2.0F);
-				if (level() instanceof ServerLevel server) {
+				if (server != null) {
 					server.sendParticles(ParticleTypes.HEART, owner.getX(), owner.getY() + 2, owner.getZ(), 1, 0, 0, 0, 0);
 				}
 			}
+			if (server != null) {
+				server.sendParticles(ParticleTypes.HEART, getX(), getY() + 2.1, getZ(), 1, 0, 0, 0, 0);
+			}
 		}
+
 		if (burstActive()) {
 			float sweep = (float) getAttributeValue(Attributes.ATTACK_DAMAGE) * 0.5F;
 			for (LivingEntity near : level().getEntitiesOfClass(LivingEntity.class, target.getBoundingBox().inflate(2.5),
 					e -> e != target && e != this && e instanceof Enemy && e.isAlive())) {
 				near.hurt(damageSources().mobAttack(this), sweep);
 			}
-			if (level() instanceof ServerLevel server) {
-				server.sendParticles(ParticleTypes.SWEEP_ATTACK, target.getX(), target.getY(0.5), target.getZ(), 2, 0.6, 0.2, 0.6, 0);
-				server.sendParticles(element().dust(), target.getX(), target.getY(0.5), target.getZ(), 12, 1.0, 0.3, 1.0, 0);
+			if (server != null) {
+				Vec3 from = position().add(0, 1.0, 0);
+				Fx.arc(server, element().dust(), from, getYRot(), 2.2, 160, 28, 0.5);
+				Fx.arc(server, ParticleTypes.WAX_OFF, from, getYRot(), 2.0, 140, 10, 0.4);
+				server.sendParticles(ParticleTypes.SWEEP_ATTACK, target.getX(), target.getY(0.5), target.getZ(), 3, 0.8, 0.2, 0.8, 0);
+				Fx.shards(server, Blocks.GOLD_BLOCK.defaultBlockState(), target.position().add(0, target.getBbHeight() / 2, 0), 12, 0.4);
 			}
+			sound(SoundEvents.PLAYER_ATTACK_SWEEP, 1.0F, 0.7F);
+			sound(SoundEvents.AMETHYST_BLOCK_HIT, 1.0F, 0.8F);
 		}
 	}
 
 	@Override
 	protected void tickAbilities() {
+		ServerLevel server = level() instanceof ServerLevel s ? s : null;
 		if (shieldTicks > 0) {
 			shieldTicks--;
-			if (shieldTicks % 10 == 0 && level() instanceof ServerLevel server) {
-				server.sendParticles(element().dust(), getX(), getY() + 1, getZ(), 2, 0.4, 0.5, 0.4, 0);
+			if (shieldTicks == 0) {
+				shieldBreaks();
+			} else if (shieldTicks % 4 == 0 && server != null) {
+				// A shimmering gold shell on her and on her owner while it lasts.
+				Fx.shimmer(server, element().dust(), position().add(0, getBbHeight() / 2, 0), 1.0, 5, random);
+				LivingEntity owner = getOwner();
+				if (owner != null && owner.distanceToSqr(this) < 16 * 16 && owner.getAbsorptionAmount() > 0) {
+					Fx.shimmer(server, element().dust(), owner.position().add(0, owner.getBbHeight() / 2, 0), 1.0, 5, random);
+				}
 			}
 		}
 		if (burstTicks > 0) {
 			burstTicks--;
 			if (burstTicks == 0) {
-				setTransientAttack(0);
-			} else if (burstTicks % 5 == 0 && level() instanceof ServerLevel server) {
-				server.sendParticles(element().dust(), getX(), getY() + 0.8, getZ(), 3, 0.5, 0.6, 0.5, 0);
+				endBurst();
+			} else if (burstTicks % 3 == 0 && server != null) {
+				// A gold aura spiralling up around her.
+				double angle = burstTicks * 0.6;
+				for (int k = 0; k < 2; k++) {
+					double a = angle + k * Math.PI;
+					server.sendParticles(element().dust(), getX() + Math.cos(a) * 0.7, getY() + (burstTicks % 30) / 15.0, getZ() + Math.sin(a) * 0.7,
+							1, 0, 0, 0, 0);
+				}
+				if (burstTicks % 9 == 0) {
+					server.sendParticles(ParticleTypes.WAX_OFF, getX(), getY() + 1.2, getZ(), 2, 0.4, 0.6, 0.4, 0);
+				}
 			}
 		}
 	}

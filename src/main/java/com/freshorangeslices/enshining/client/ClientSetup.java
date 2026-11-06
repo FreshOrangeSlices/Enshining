@@ -2,12 +2,10 @@ package com.freshorangeslices.enshining.client;
 
 import com.freshorangeslices.enshining.Enshining;
 import com.freshorangeslices.enshining.registry.ModEntities;
-import net.minecraft.resources.ResourceLocation;
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.client.event.EntityRenderersEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
-import software.bernie.geckolib.model.DefaultedEntityGeoModel;
 import software.bernie.geckolib.renderer.GeoEntityRenderer;
 
 /**
@@ -22,6 +20,6 @@ public final class ClientSetup {
 	@SubscribeEvent
 	public static void renderers(EntityRenderersEvent.RegisterRenderers event) {
 		event.registerEntityRenderer(ModEntities.NOELLE.get(),
-				context -> new GeoEntityRenderer<>(context, new DefaultedEntityGeoModel<>(new ResourceLocation(Enshining.MODID, "noelle"), true)));
+				context -> new GeoEntityRenderer<>(context, new NoelleModel()));
 	}
 }

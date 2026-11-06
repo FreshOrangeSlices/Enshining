@@ -105,11 +105,12 @@ public final class CompanionGameTests {
 	@GameTest(template = "empty")
 	public static void breastplateShieldsHer(GameTestHelper helper) {
 		NoelleEntity noelle = noelle(helper);
-		Zombie zombie = helper.spawn(EntityType.ZOMBIE, new BlockPos(4, 2, 4));
+		Zombie zombie = helper.spawn(EntityType.ZOMBIE, new BlockPos(3, 2, 3));
 		zombie.setNoAi(true);
 		noelle.useSkill(zombie);
 		helper.assertTrue(noelle.shieldActive(), "The shield is up");
 		helper.assertTrue(noelle.getAbsorptionAmount() > 0, "Absorption from Breastplate: " + noelle.getAbsorptionAmount());
+		helper.assertTrue(zombie.getHealth() < zombie.getMaxHealth(), "The stone armor bursting out hurt the zombie next to her");
 		helper.succeed();
 	}
 
@@ -120,7 +121,7 @@ public final class CompanionGameTests {
 		zombie.setNoAi(true);
 		double before = noelle.getAttributeValue(Attributes.ATTACK_DAMAGE);
 		noelle.useBurst(zombie);
-		helper.assertTrue(noelle.burstActive(), "Sweeping Time is on");
+		helper.assertTrue(noelle.burstActive() && noelle.sweeping(), "Sweeping Time is on (and synced)");
 		helper.assertTrue(noelle.getAttributeValue(Attributes.ATTACK_DAMAGE) == before + 4.0, "Half her 8 armor as attack");
 		helper.succeed();
 	}
