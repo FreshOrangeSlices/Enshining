@@ -85,7 +85,8 @@ public class NoelleEntity extends CompanionEntity {
 	public void useSkill(LivingEntity target) {
 		shieldTicks = SHIELD_TICKS;
 		shield(this);
-		if (getOwner() instanceof LivingEntity owner && owner.distanceToSqr(this) < 16 * 16) {
+		LivingEntity owner = getOwner();
+		if (owner != null && owner.distanceToSqr(this) < 16 * 16) {
 			shield(owner);
 		}
 		sound(SoundEvents.ANVIL_LAND, 0.35F, 1.6F);
@@ -121,7 +122,8 @@ public class NoelleEntity extends CompanionEntity {
 	protected void onHit(LivingEntity target) {
 		if (shieldActive() && random.nextBoolean()) {
 			heal(2.0F);
-			if (getOwner() instanceof LivingEntity owner && owner.distanceToSqr(this) < 16 * 16) {
+			LivingEntity owner = getOwner();
+			if (owner != null && owner.distanceToSqr(this) < 16 * 16) {
 				owner.heal(2.0F);
 				if (level() instanceof ServerLevel server) {
 					server.sendParticles(ParticleTypes.HEART, owner.getX(), owner.getY() + 2, owner.getZ(), 1, 0, 0, 0, 0);
