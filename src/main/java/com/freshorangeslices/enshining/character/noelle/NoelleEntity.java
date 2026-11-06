@@ -93,7 +93,8 @@ public class NoelleEntity extends CompanionEntity {
 	}
 
 	private void shield(LivingEntity who) {
-		who.addEffect(new MobEffectInstance(MobEffects.ABSORPTION, SHIELD_TICKS, 1), this);
+		// No potion swirls (Absorption's are big and blue, right in the owner's face); the icon still shows it.
+		who.addEffect(new MobEffectInstance(MobEffects.ABSORPTION, SHIELD_TICKS, 1, false, false, true), this);
 		ring(element().dust(), who.getX(), who.getY() + 0.1, who.getZ(), 1.0, 24);
 		ring(element().dust(), who.getX(), who.getY() + 1.0, who.getZ(), 0.8, 16);
 	}
