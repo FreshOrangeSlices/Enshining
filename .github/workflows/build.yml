@@ -1,0 +1,104 @@
+name: build
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: checkout repository
+        uses: actions/checkout@v6
+      - name: setup jdk
+        uses: actions/setup-java@v5
+        with:
+          java-version: '17'
+          distribution: 'microsoft'
+      - name: setup gradle cache
+        uses: gradle/actions/setup-gradle@v6
+      - name: make gradle wrapper executable
+        run: chmod +x ./gradlew
+      - name: build and game-test Enshining
+        run: |
+          set -o pipefail
+          ./gradlew build runGameTestServer --stacktrace 2>&1 | tee build.log
+      - name: report game tests
+        if: always()
+        run: |
+          python3 - <<'PY'
+          import os, re
+          if not os.path.exists('build.log'):
+              raise SystemExit(0)
+          lines = open('build.log', encoding='utf-8', errors='replace').read().splitlines()
+          hits = [l.strip() for l in lines if re.search(r'GAME TESTS|required tests|tests? failed|failed!|GameTestAssert|Task :runGameTestServer|passed|enshining|Enshining', l)
+                  and 'warning:' not in l]
+          text = '\n'.join(hits[-40:]) or 'no game test output found'
+          esc = lambda t: t.replace('%', '%25').replace('\r', '%0D').replace('\n', '%0A')
+          print(f"::notice title=gametest-summary::{esc(text[:3900])}")
+          # A server that crashed (or never ran the tests) can still leave Gradle happy: say why, and fail.
+          if not any('GAME TESTS COMPLETE' in l for l in lines):
+              keep = []
+              for i, line in enumerate(lines):
+                  if re.search(r'/ERROR\]|/FATAL\]|Exception|Caused by|Crash|crash report|Mixin|Missing|Failed', line):
+                      keep.extend(lines[i:i + 4])
+              text = '\n'.join(dict.fromkeys(keep)) or '\n'.join(lines[-120:])
+              for n, chunk in enumerate([text[i:i + 3900] for i in range(0, len(text), 3900)][:8]):
+                  print(f"::error title=gametest-crash-{n:02d}::{esc(chunk)}")
+              raise SystemExit(1)
+          PY
+      - name: report build errors
+        if: failure()
+        run: |
+          python3 - <<'PY'
+          import os, re
+          if not os.path.exists('build.log'):
+              raise SystemExit(0)
+          lines = open('build.log', encoding='utf-8', errors='replace').read().splitlines()
+          # Each failed game test with its message first (compile warnings name gametest paths and would crowd them out).
+          fails = [l.strip() for l in lines if 'failed!' in l]
+          if fails:
+              print("::error title=test-failures::" + '\n'.join(fails)[:3900].replace('%', '%25').replace('\n', '%0A'))
+          keep = []
+          for i, line in enumerate(lines):
+              if 'warning:' in line:
+                  continue
+              if re.search(r'(error:|FAILED|What went wrong|Exception|> Task .*FAILED|GameTest|gametest|Could not)', line):
+                  keep.extend(lines[max(0, i - 1):i + 6])
+          text = '\n'.join(dict.fromkeys(keep)) or '\n'.join(lines[-200:])
+          esc = lambda t: t.replace('%', '%25').replace('\r', '%0D').replace('\n', '%0A')
+          for n, chunk in enumerate([text[i:i + 3900] for i in range(0, len(text), 3900)][:10]):
+              print(f"::error title=build-errors-{n:02d}::{esc(chunk)}")
+          PY
+      # The jar to install, whenever it was built.
+      - name: capture the Enshining jar
+        if: always() && hashFiles('build/libs/*.jar') != ''
+        uses: actions/upload-artifact@v7
+        with:
+          name: enshining-jar
+          path: build/libs/*.jar
+
+  # Temporary: GeckoLib's class names for this version (removed once the code compiles).
+  api-dump:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: setup jdk
+        uses: actions/setup-java@v5
+        with:
+          java-version: '17'
+          distribution: 'microsoft'
+      - name: dump GeckoLib classes
+        run: |
+          url=$(curl -s https://api.modrinth.com/v2/version/aC5KMoNg | python3 -c "import json,sys;print(json.load(sys.stdin)['files'][0]['url'])")
+          curl -sL "$url" -o geckolib.jar
+          unzip -l geckolib.jar | awk '{print $4}' | grep '\.class$' | grep -E 'GeoEntity|AnimatableInstanceCache|AnimationController|AnimatableManager|RawAnimation|PlayState|AnimationState|GeckoLibUtil|GeoEntityRenderer|DefaultedEntityGeoModel|GeoModel\.class' | grep -v '\$' > names.txt
+          mkdir x && cd x && unzip -q ../geckolib.jar
+          { cat ../names.txt; for c in $(grep -E 'AnimationState|AnimationController\.class|GeoEntity\.class|GeoAnimatable\.class|RawAnimation' ../names.txt); do javap -cp . "${c%.class}" | grep -E 'public .*(isMoving|setAndContinue|triggerAnim|triggerableAnim|thenLoop|thenPlay|begin|registerControllers|getAnimatableInstanceCache|AnimationController\()'; done; } > ../dump.txt
+          cd ..
+          python3 - <<'PY2'
+          t = open('dump.txt').read()
+          esc = lambda s: s.replace('%', '%25').replace('\n', '%0A')
+          for n, c in enumerate([t[i:i+3900] for i in range(0, len(t), 3900)][:8]):
+              print(f"::notice title=geckolib-{n:02d}::{esc(c)}")
+          PY2
