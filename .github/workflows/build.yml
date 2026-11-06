@@ -5,6 +5,9 @@ on:
   pull_request:
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: ubuntu-24.04
@@ -78,3 +81,24 @@ jobs:
         with:
           name: enshining-jar
           path: build/libs/*.jar
+      # A Modrinth pack (Forge, GeckoLib, Enshining) for the Modrinth App, kept on the "latest" release page.
+      - name: build the test pack
+        if: success()
+        run: |
+          jar=$(ls build/libs/*.jar | grep -v -- '-sources\|-slim' | head -1)
+          python3 tools/make_mrpack.py "$jar" Enshining-Test.mrpack "build.${GITHUB_RUN_NUMBER}"
+      - name: publish the test pack
+        if: success() && github.event_name == 'push' && github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          jar=$(ls build/libs/*.jar | grep -v -- '-sources\|-slim' | head -1)
+          notes="Latest passing build (run ${GITHUB_RUN_NUMBER}). Easiest: download Enshining-Test.mrpack and open it with the Modrinth App. Or use the jar with Forge 1.20.1 and GeckoLib."
+          if gh release view latest >/dev/null 2>&1; then
+            gh release edit latest --notes "$notes" --prerelease
+          else
+            gh release create latest --title "Latest build" --notes "$notes" --prerelease --target "$GITHUB_SHA"
+          fi
+          git push -f "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "${GITHUB_SHA}:refs/tags/latest"
+          cp "$jar" Enshining.jar
+          gh release upload latest Enshining-Test.mrpack Enshining.jar --clobber

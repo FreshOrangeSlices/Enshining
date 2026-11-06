@@ -37,6 +37,13 @@ plus a `weapon` bone in the right hand. That means:
 Files per character: `assets/enshining/geo/entity/NAME.geo.json`, `textures/entity/NAME.png`,
 `animations/entity/NAME.animation.json`.
 
+## Trying it
+
+The [latest release](https://github.com/FreshOrangeSlices/Enshining/releases/tag/latest) always has the newest passing build:
+
+- **Enshining-Test.mrpack**: open it with the Modrinth App (or add an instance from file). It sets up Forge 1.20.1, GeckoLib and Enshining in one go.
+- **Enshining.jar**: just the mod, for any Forge 1.20.1 setup with GeckoLib.
+
 ## Building
 
 CI (GitHub Actions) runs `./gradlew build runGameTestServer`; the jar to install is the artifact `enshining-jar`.
