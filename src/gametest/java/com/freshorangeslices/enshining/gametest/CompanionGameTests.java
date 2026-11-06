@@ -145,7 +145,8 @@ public final class CompanionGameTests {
 		Zombie zombie = helper.spawn(EntityType.ZOMBIE, new BlockPos(3, 2, 3));
 		zombie.setNoAi(true);
 		zombie.setPersistenceRequired();
-		noelle.hurt(helper.getLevel().damageSources().mobAttack(zombie), 1.0F);
+		// After a few ticks: a hit on an entity's very first tick doesn't count for retaliation in vanilla.
+		helper.runAfterDelay(5, () -> noelle.hurt(helper.getLevel().damageSources().mobAttack(zombie), 1.0F));
 		helper.succeedWhen(() -> helper.assertTrue(noelle.getTarget() == zombie, "A wild Noelle hits back: " + noelle.getTarget()));
 	}
 }

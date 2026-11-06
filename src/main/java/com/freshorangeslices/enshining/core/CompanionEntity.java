@@ -27,7 +27,8 @@ import net.minecraft.world.entity.ai.goal.FollowOwnerGoal;
 import net.minecraft.world.entity.ai.goal.LookAtPlayerGoal;
 import net.minecraft.world.entity.ai.goal.MeleeAttackGoal;
 import net.minecraft.world.entity.ai.goal.RandomLookAroundGoal;
-import net.minecraft.world.entity.ai.goal.SitWhenOrderedToGoal;
+import net.minecraft.world.entity.ai.goal.Goal;
+import java.util.EnumSet;
 import net.minecraft.world.entity.ai.goal.WaterAvoidingRandomStrollGoal;
 import net.minecraft.world.entity.ai.goal.target.HurtByTargetGoal;
 import net.minecraft.world.entity.ai.goal.target.NearestAttackableTargetGoal;
@@ -229,7 +230,34 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 	@Override
 	protected void registerGoals() {
 		goalSelector.addGoal(1, new FloatGoal(this));
-		goalSelector.addGoal(2, new SitWhenOrderedToGoal(this));
+		// Not vanilla's SitWhenOrderedToGoal: that one also sits whenever the owner isn't loaded (logged off, another
+		// dimension), freezing the companion whatever its mode. Ours sits only on Stay.
+		goalSelector.addGoal(2, new Goal() {
+			{
+				setFlags(EnumSet.of(Goal.Flag.JUMP, Goal.Flag.MOVE));
+			}
+
+			@Override
+			public boolean canUse() {
+				return isTame() && mode() == CompanionMode.STAY && !isInWaterOrBubble() && onGround();
+			}
+
+			@Override
+			public boolean canContinueToUse() {
+				return isTame() && mode() == CompanionMode.STAY;
+			}
+
+			@Override
+			public void start() {
+				getNavigation().stop();
+				setInSittingPose(true);
+			}
+
+			@Override
+			public void stop() {
+				setInSittingPose(false);
+			}
+		});
 		goalSelector.addGoal(4, new MeleeAttackGoal(this, 1.15, true));
 		goalSelector.addGoal(5, new FollowOwnerGoal(this, 1.1, 8.0F, 3.0F, false) {
 			@Override
