@@ -5,7 +5,7 @@
    "description": {
     "identifier": "geometry.enshining.noelle",
     "texture_width": 128,
-    "texture_height": 64,
+    "texture_height": 128,
     "visible_bounds_width": 3,
     "visible_bounds_height": 3,
     "visible_bounds_offset": [
@@ -611,6 +611,415 @@
         54
        ],
        "inflate": 0.25
+      }
+     ]
+    },
+    {
+     "name": "belt",
+     "parent": "body",
+     "pivot": [
+      0,
+      17,
+      0
+     ],
+     "cubes": [
+      {
+       "origin": [
+        -5,
+        16,
+        -3
+       ],
+       "size": [
+        10,
+        2,
+        6
+       ],
+       "uv": [
+        0,
+        64
+       ]
+      },
+      {
+       "origin": [
+        -1.5,
+        15,
+        -4
+       ],
+       "size": [
+        3,
+        3,
+        1
+       ],
+       "uv": [
+        32,
+        64
+       ]
+      }
+     ]
+    },
+    {
+     "name": "skirt",
+     "parent": "body",
+     "pivot": [
+      0,
+      16,
+      0
+     ],
+     "cubes": [
+      {
+       "origin": [
+        -5,
+        13,
+        -3
+       ],
+       "size": [
+        10,
+        3,
+        6
+       ],
+       "uv": [
+        0,
+        72
+       ]
+      }
+     ]
+    },
+    {
+     "name": "skirt_mid",
+     "parent": "skirt",
+     "pivot": [
+      0,
+      13,
+      0
+     ],
+     "cubes": [
+      {
+       "origin": [
+        -6,
+        10,
+        -4
+       ],
+       "size": [
+        12,
+        3,
+        8
+       ],
+       "uv": [
+        0,
+        84
+       ]
+      }
+     ]
+    },
+    {
+     "name": "skirt_hem",
+     "parent": "skirt_mid",
+     "pivot": [
+      0,
+      10,
+      0
+     ],
+     "cubes": [
+      {
+       "origin": [
+        -6.5,
+        7,
+        -4.5
+       ],
+       "size": [
+        13,
+        3,
+        9
+       ],
+       "uv": [
+        0,
+        98
+       ]
+      },
+      {
+       "origin": [
+        -7,
+        6,
+        -5
+       ],
+       "size": [
+        14,
+        1,
+        10
+       ],
+       "uv": [
+        0,
+        112
+       ]
+      }
+     ]
+    },
+    {
+     "name": "bow",
+     "parent": "body",
+     "pivot": [
+      0,
+      15,
+      3
+     ],
+     "cubes": [
+      {
+       "origin": [
+        -6,
+        13,
+        3
+       ],
+       "size": [
+        5,
+        4,
+        2
+       ],
+       "uv": [
+        64,
+        64
+       ]
+      },
+      {
+       "origin": [
+        1,
+        13,
+        3
+       ],
+       "size": [
+        5,
+        4,
+        2
+       ],
+       "uv": [
+        64,
+        72
+       ]
+      },
+      {
+       "origin": [
+        -1,
+        13.5,
+        3
+       ],
+       "size": [
+        2,
+        3,
+        2
+       ],
+       "uv": [
+        80,
+        64
+       ]
+      }
+     ]
+    },
+    {
+     "name": "bow_tail_left",
+     "parent": "bow",
+     "pivot": [
+      -1,
+      14,
+      5
+     ],
+     "cubes": [
+      {
+       "origin": [
+        -3,
+        4,
+        5
+       ],
+       "size": [
+        2,
+        10,
+        1
+       ],
+       "uv": [
+        92,
+        64
+       ]
+      }
+     ]
+    },
+    {
+     "name": "bow_tail_right",
+     "parent": "bow",
+     "pivot": [
+      1,
+      14,
+      5
+     ],
+     "cubes": [
+      {
+       "origin": [
+        1,
+        4,
+        5
+       ],
+       "size": [
+        2,
+        10,
+        1
+       ],
+       "uv": [
+        100,
+        64
+       ]
+      }
+     ]
+    },
+    {
+     "name": "pauldron",
+     "parent": "left_arm",
+     "pivot": [
+      5,
+      22,
+      0
+     ],
+     "cubes": [
+      {
+       "origin": [
+        3,
+        21,
+        -3
+       ],
+       "size": [
+        5,
+        3,
+        6
+       ],
+       "uv": [
+        64,
+        80
+       ]
+      },
+      {
+       "origin": [
+        3.5,
+        19,
+        -3
+       ],
+       "size": [
+        5,
+        2,
+        6
+       ],
+       "uv": [
+        64,
+        92
+       ]
+      }
+     ]
+    },
+    {
+     "name": "headdress",
+     "parent": "head",
+     "pivot": [
+      0,
+      32,
+      0
+     ],
+     "cubes": [
+      {
+       "origin": [
+        -3,
+        32,
+        -3
+       ],
+       "size": [
+        6,
+        4,
+        1
+       ],
+       "uv": [
+        64,
+        104
+       ]
+      },
+      {
+       "origin": [
+        -1,
+        36,
+        -3
+       ],
+       "size": [
+        2,
+        2,
+        1
+       ],
+       "uv": [
+        80,
+        104
+       ]
+      }
+     ]
+    },
+    {
+     "name": "roses",
+     "parent": "head",
+     "pivot": [
+      0,
+      28,
+      0
+     ],
+     "cubes": [
+      {
+       "origin": [
+        -6,
+        28,
+        -1
+       ],
+       "size": [
+        2,
+        2,
+        2
+       ],
+       "uv": [
+        88,
+        104
+       ]
+      },
+      {
+       "origin": [
+        4,
+        28,
+        -1
+       ],
+       "size": [
+        2,
+        2,
+        2
+       ],
+       "uv": [
+        88,
+        110
+       ]
+      }
+     ]
+    },
+    {
+     "name": "neck_rose",
+     "parent": "chest",
+     "pivot": [
+      0,
+      23,
+      2
+     ],
+     "cubes": [
+      {
+       "origin": [
+        -1,
+        21.5,
+        2.2
+       ],
+       "size": [
+        2,
+        2,
+        1
+       ],
+       "uv": [
+        88,
+        116
+       ]
       }
      ]
     }
