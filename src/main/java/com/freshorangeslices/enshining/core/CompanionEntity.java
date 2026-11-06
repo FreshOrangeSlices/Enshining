@@ -59,6 +59,11 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 
 	private static final EntityDataAccessor<Integer> MODE = SynchedEntityData.defineId(CompanionEntity.class, EntityDataSerializers.INT);
 	private static final EntityDataAccessor<Integer> LEVEL = SynchedEntityData.defineId(CompanionEntity.class, EntityDataSerializers.INT);
+	/** The move playing now (0 none, 1 skill, 2 burst), synced so every client animates it. */
+	private static final EntityDataAccessor<Integer> ACTION = SynchedEntityData.defineId(CompanionEntity.class, EntityDataSerializers.INT);
+	public static final int ACTION_NONE = 0;
+	public static final int ACTION_SKILL = 1;
+	public static final int ACTION_BURST = 2;
 
 	private static final UUID LEVEL_HEALTH = UUID.fromString("5e3b1c2a-7d41-4c55-9a0e-0e1a1f000001");
 	private static final UUID LEVEL_ATTACK = UUID.fromString("5e3b1c2a-7d41-4c55-9a0e-0e1a1f000002");
@@ -72,6 +77,8 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 	private int xp;
 	private int skillCooldown;
 	private int energy;
+	private int actionTicks;
+	private boolean wasSwinging; // client side, to restart the attack animation on each new swing
 
 	protected CompanionEntity(EntityType<? extends TamableAnimal> type, Level level) {
 		super(type, level);
@@ -116,6 +123,7 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 		super.defineSynchedData();
 		entityData.define(MODE, CompanionMode.FOLLOW.ordinal());
 		entityData.define(LEVEL, 1);
+		entityData.define(ACTION, ACTION_NONE);
 	}
 
 	public CompanionMode mode() {
@@ -141,6 +149,25 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 
 	public int xp() {
 		return xp;
+	}
+
+	public int action() {
+		return entityData.get(ACTION);
+	}
+
+	/** Shows the skill or burst animation for this many ticks on every client. */
+	protected void playAction(int action, int ticks) {
+		entityData.set(ACTION, action);
+		actionTicks = ticks;
+	}
+
+	/** How long the skill and burst animations last, in ticks (their animation_length times 20). */
+	protected int skillAnimationTicks() {
+		return 18;
+	}
+
+	protected int burstAnimationTicks() {
+		return 28;
 	}
 
 	public int energy() {
@@ -306,7 +333,6 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 
 	@Override
 	public boolean doHurtTarget(Entity target) {
-		triggerAnim("action", "attack");
 		boolean hit = super.doHurtTarget(target);
 		if (hit && target instanceof LivingEntity living) {
 			energy = Math.min(MAX_ENERGY, energy + 10);
@@ -322,6 +348,9 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 			skillCooldown--;
 		}
 		tickAbilities();
+		if (actionTicks > 0 && --actionTicks == 0) {
+			entityData.set(ACTION, ACTION_NONE);
+		}
 
 		LivingEntity target = getTarget();
 		if (target == null || !target.isAlive() || distanceToSqr(target) > 36) {
@@ -329,12 +358,12 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 		}
 		if (energy >= burstCost()) {
 			energy = 0;
-			triggerAnim("action", "burst");
+			playAction(ACTION_BURST, burstAnimationTicks());
 			useBurst(target);
 		} else if (skillCooldown <= 0) {
 			skillCooldown = skillCooldownTicks();
 			energy = Math.min(MAX_ENERGY, energy + 6);
-			triggerAnim("action", "skill");
+			playAction(ACTION_SKILL, skillAnimationTicks());
 			useSkill(target);
 		}
 	}
@@ -447,18 +476,34 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 
 	// ---- Animation --------------------------------------------------------------------------------------------
 
+	/**
+	 * One controller, decided on each client from synced state (no server-sent triggers): the burst or skill while one
+	 * is playing, the attack while swinging (restarted on every new swing), else sit, walk or idle.
+	 */
 	@Override
 	public void registerControllers(AnimatableManager.ControllerRegistrar controllers) {
-		controllers.add(new AnimationController<>(this, "movement", 5, state -> {
+		controllers.add(new AnimationController<>(this, "main", 3, state -> {
+			int action = action();
+			if (action == ACTION_BURST) {
+				return state.setAndContinue(burstAnimation());
+			}
+			if (action == ACTION_SKILL) {
+				return state.setAndContinue(skillAnimation());
+			}
+			boolean newSwing = swinging && !wasSwinging;
+			wasSwinging = swinging;
+			if (newSwing) {
+				state.getController().forceAnimationReset();
+				return state.setAndContinue(ATTACK);
+			}
+			if (state.isCurrentAnimation(ATTACK) && !state.getController().hasAnimationFinished()) {
+				return PlayState.CONTINUE;
+			}
 			if (isInSittingPose()) {
 				return state.setAndContinue(SIT);
 			}
 			return state.setAndContinue(state.isMoving() ? WALK : IDLE);
 		}));
-		controllers.add(new AnimationController<>(this, "action", 2, state -> PlayState.STOP)
-				.triggerableAnim("attack", ATTACK)
-				.triggerableAnim("skill", skillAnimation())
-				.triggerableAnim("burst", burstAnimation()));
 	}
 
 	@Override

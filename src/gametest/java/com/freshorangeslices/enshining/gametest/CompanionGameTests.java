@@ -129,8 +129,8 @@ public final class CompanionGameTests {
 	public static void befriendedNoelleFightsAZombie(GameTestHelper helper) {
 		NoelleEntity noelle = helper.spawn(ModEntities.NOELLE.get(), new BlockPos(1, 2, 1));
 		noelle.befriend(player(helper));
-		Zombie zombie = helper.spawn(EntityType.ZOMBIE, new BlockPos(4, 2, 4));
-		zombie.setNoAi(true);
+		// A husk with its AI on (one with no AI floats where it spawned, out of reach; a husk doesn't burn in daylight).
+		Zombie zombie = helper.spawn(EntityType.HUSK, new BlockPos(4, 2, 4));
 		zombie.setPersistenceRequired();
 		float start = zombie.getHealth();
 		helper.succeedWhen(() -> {
