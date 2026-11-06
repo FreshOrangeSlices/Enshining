@@ -363,6 +363,12 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 		return InteractionResult.PASS;
 	}
 
+	/** Owner by UUID, so it holds even when the owner isn't loaded in this level (and it's cheaper than a lookup). */
+	@Override
+	public boolean isOwnedBy(LivingEntity entity) {
+		return entity != null && isTame() && entity.getUUID().equals(getOwnerUUID());
+	}
+
 	/** Befriends this companion to the player at once (the gift roll already passed). */
 	public void befriend(Player player) {
 		tame(player);
