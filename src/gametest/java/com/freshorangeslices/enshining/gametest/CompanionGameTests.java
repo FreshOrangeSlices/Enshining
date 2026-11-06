@@ -108,13 +108,15 @@ public final class CompanionGameTests {
 		NoelleEntity noelle = noelle(helper);
 		Zombie zombie = helper.spawn(EntityType.ZOMBIE, new BlockPos(3, 2, 3));
 		zombie.setNoAi(true);
-		noelle.useSkill(zombie);
-		helper.assertTrue(noelle.shieldActive(), "The shield is up");
-		helper.assertTrue(noelle.getAbsorptionAmount() > 0, "Absorption from Breastplate: " + noelle.getAbsorptionAmount());
-		helper.assertTrue(zombie.getHealth() < zombie.getMaxHealth(), "The stone armor bursting out hurt the zombie next to her: health " + zombie.getHealth() + "/" + zombie.getMaxHealth()
-				+ ", distance " + Math.sqrt(noelle.distanceToSqr(zombie)) + ", invulnerable " + zombie.isInvulnerable() + ", alive " + zombie.isAlive()
-				+ ", difficulty " + helper.getLevel().getDifficulty());
-		helper.succeed();
+		// A few ticks in: on a lagging test server, entities spawned this tick may not be findable yet.
+		helper.runAfterDelay(5, () -> {
+			noelle.useSkill(zombie);
+			helper.assertTrue(noelle.shieldActive(), "The shield is up");
+			helper.assertTrue(noelle.getAbsorptionAmount() > 0, "Absorption from Breastplate: " + noelle.getAbsorptionAmount());
+			helper.assertTrue(zombie.getHealth() < zombie.getMaxHealth(), "The stone armor bursting out hurt the zombie next to her: health "
+					+ zombie.getHealth() + "/" + zombie.getMaxHealth() + ", distance " + Math.sqrt(noelle.distanceToSqr(zombie)));
+			helper.succeed();
+		});
 	}
 
 	@GameTest(template = "empty")
