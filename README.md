@@ -27,7 +27,8 @@ Planned next: Childe (Hydro) and Lumine (Dendro + Hydro to start).
 
 Every companion uses the same rig, `docs/art/companion_rig.geo.json`: a slim-arm player model (with the outer layer)
 with the torso split in two (`body` bends at the hips, `chest` at the waist; head and arms ride on `chest`)
-plus a `weapon` bone in the right hand. That means:
+elbows (`right_forearm`, `left_forearm`), knees (`right_shin`, `left_shin`)
+and a `weapon` bone in the right hand (on the forearm). That means:
 
 - **Textures are Minecraft skins.** Any 64x64 slim-arm skin fits; paint it in any skin editor. The texture is 128x64:
   the skin on the left half, the weapon's pixels on the right.
