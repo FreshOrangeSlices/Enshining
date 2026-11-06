@@ -391,6 +391,14 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 		return InteractionResult.PASS;
 	}
 
+	/** The goals running now, for tests and debugging. */
+	public String goalSelectorRunning() {
+		StringBuilder out = new StringBuilder();
+		goalSelector.getRunningGoals().forEach(g -> out.append(g.getGoal().getClass().getSimpleName()).append(' '));
+		targetSelector.getRunningGoals().forEach(g -> out.append('t').append(':').append(g.getGoal().getClass().getSimpleName()).append(' '));
+		return out.toString().trim();
+	}
+
 	/** Owner by UUID, so it holds even when the owner isn't loaded in this level (and it's cheaper than a lookup). */
 	@Override
 	public boolean isOwnedBy(LivingEntity entity) {

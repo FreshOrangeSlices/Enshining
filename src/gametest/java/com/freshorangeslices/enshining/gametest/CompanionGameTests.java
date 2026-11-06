@@ -135,7 +135,9 @@ public final class CompanionGameTests {
 		float start = zombie.getHealth();
 		helper.succeedWhen(() -> {
 			helper.assertTrue(noelle.getTarget() == zombie, "Noelle targets the zombie: " + noelle.getTarget());
-			helper.assertTrue(zombie.getHealth() < start || !zombie.isAlive(), "And hits it");
+			helper.assertTrue(zombie.getHealth() < start || !zombie.isAlive(), "And hits it. Noelle at " + noelle.position() + ", zombie at "
+					+ zombie.position() + ", distance " + Math.sqrt(noelle.distanceToSqr(zombie)) + ", sitting " + noelle.isInSittingPose()
+					+ ", mode " + noelle.mode() + ", running " + noelle.goalSelectorRunning() + ", path " + noelle.getNavigation().getPath());
 		});
 	}
 
