@@ -78,31 +78,3 @@ jobs:
         with:
           name: enshining-jar
           path: build/libs/*.jar
-
-  # Temporary: GeckoLib's class names for this version (removed once the code compiles).
-  api-dump:
-    runs-on: ubuntu-24.04
-    steps:
-      - name: setup jdk
-        uses: actions/setup-java@v5
-        with:
-          java-version: '17'
-          distribution: 'microsoft'
-      - name: dump GeckoLib classes
-        run: |
-          set +e
-          curl -s https://api.modrinth.com/v2/version/aC5KMoNg > v.json
-          url=$(python3 -c "import json;print(json.load(open('v.json'))['files'][0]['url'])")
-          echo "$url"
-          curl -sL "$url" -o geckolib.jar
-          unzip -l geckolib.jar | awk '{print $4}' | grep '\.class$' | grep -v '\$' | grep -E 'GeoEntity|AnimatableInstanceCache|AnimationController|AnimatableManager|RawAnimation|PlayState|AnimationState|GeckoLibUtil|GeoEntityRenderer|DefaultedEntityGeoModel|/GeoModel\.class|GeoAnimatable\.class' > names.txt
-          { echo "$url"; cat names.txt; } > dump.txt
-          mkdir x && cd x && unzip -q ../geckolib.jar
-          for c in $(grep -E 'AnimationState|AnimationController\.class|GeoEntity\.class|GeoAnimatable\.class|RawAnimation|DefaultedEntityGeoModel' ../names.txt); do echo "== $c"; javap -cp . "${c%.class}" | grep -E 'public' | head -40; done >> ../dump.txt
-          cd ..
-          python3 - <<'PY2'
-          t = open('dump.txt').read()
-          esc = lambda s: s.replace('%', '%25').replace('\n', '%0A')
-          for n, c in enumerate([t[i:i+3900] for i in range(0, len(t), 3900)][:9]):
-              print(f"::notice title=geckolib-{n:02d}::{esc(c)}")
-          PY2

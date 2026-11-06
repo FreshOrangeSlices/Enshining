@@ -1,0 +1,11 @@
+{
+  "entity.enshining.noelle": "Noelle",
+  "item.enshining.noelle_spawn_egg": "Noelle Spawn Egg",
+  "enshining.mode.follow": "Following",
+  "enshining.mode.wander": "Wandering",
+  "enshining.mode.stay": "Staying",
+  "enshining.companion.befriended": "%s is now your companion!",
+  "enshining.companion.mode": "%s: %s",
+  "enshining.companion.status": "%s - Lv %s (%s/%s XP), energy %s, %s",
+  "enshining.companion.level_up": "%s reached level %s!"
+}
