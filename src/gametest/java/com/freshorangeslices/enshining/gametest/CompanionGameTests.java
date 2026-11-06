@@ -45,6 +45,7 @@ public final class CompanionGameTests {
 		helper.assertTrue(noelle.getMaxHealth() == 30.0F, "30 health: " + noelle.getMaxHealth());
 		helper.assertTrue(noelle.getAttributeValue(Attributes.ARMOR) == 8.0, "8 armor");
 		helper.assertTrue(noelle.companionLevel() == 1, "Level 1");
+		helper.assertFalse(noelle.inCombat(), "Not in a fight, so no claymore");
 		helper.succeed();
 	}
 
@@ -138,6 +139,7 @@ public final class CompanionGameTests {
 		float start = zombie.getHealth();
 		helper.succeedWhen(() -> {
 			helper.assertTrue(noelle.getTarget() == zombie, "Noelle targets the zombie: " + noelle.getTarget());
+			helper.assertTrue(noelle.inCombat(), "She's in a fight (her claymore shows)");
 			helper.assertTrue(zombie.getHealth() < start || !zombie.isAlive(), "And hits it. Noelle at " + noelle.position() + ", zombie at "
 					+ zombie.position() + ", distance " + Math.sqrt(noelle.distanceToSqr(zombie)) + ", sitting " + noelle.isInSittingPose()
 					+ ", mode " + noelle.mode() + ", running " + noelle.goalSelectorRunning() + ", path " + noelle.getNavigation().getPath());

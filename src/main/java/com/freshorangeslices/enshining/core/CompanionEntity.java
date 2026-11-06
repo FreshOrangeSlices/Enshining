@@ -61,6 +61,8 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 	private static final EntityDataAccessor<Integer> LEVEL = SynchedEntityData.defineId(CompanionEntity.class, EntityDataSerializers.INT);
 	/** The move playing now (0 none, 1 skill, 2 burst), synced so every client animates it. */
 	private static final EntityDataAccessor<Integer> ACTION = SynchedEntityData.defineId(CompanionEntity.class, EntityDataSerializers.INT);
+	/** In a fight (a target, or hit or hitting in the last 3 seconds): synced, so the weapon only shows then, like in Genshin. */
+	private static final EntityDataAccessor<Boolean> COMBAT = SynchedEntityData.defineId(CompanionEntity.class, EntityDataSerializers.BOOLEAN);
 	public static final int ACTION_NONE = 0;
 	public static final int ACTION_SKILL = 1;
 	public static final int ACTION_BURST = 2;
@@ -71,6 +73,9 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 	protected static final RawAnimation IDLE = RawAnimation.begin().thenLoop("animation.companion.idle");
 	protected static final RawAnimation WALK = RawAnimation.begin().thenLoop("animation.companion.walk");
 	protected static final RawAnimation SIT = RawAnimation.begin().thenLoop("animation.companion.sit");
+	protected static final RawAnimation RUN = RawAnimation.begin().thenLoop("animation.companion.run");
+	protected static final RawAnimation JUMP = RawAnimation.begin().thenLoop("animation.companion.jump");
+	protected static final RawAnimation SWIM = RawAnimation.begin().thenLoop("animation.companion.swim");
 	protected static final RawAnimation ATTACK = RawAnimation.begin().thenPlay("animation.companion.attack");
 
 	private final AnimatableInstanceCache cache = GeckoLibUtil.createInstanceCache(this);
@@ -78,6 +83,7 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 	private int skillCooldown;
 	private int energy;
 	private int actionTicks;
+	private int combatTicks;
 	private boolean wasSwinging; // client side, to restart the attack animation on each new swing
 
 	protected CompanionEntity(EntityType<? extends TamableAnimal> type, Level level) {
@@ -124,6 +130,7 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 		entityData.define(MODE, CompanionMode.FOLLOW.ordinal());
 		entityData.define(LEVEL, 1);
 		entityData.define(ACTION, ACTION_NONE);
+		entityData.define(COMBAT, false);
 	}
 
 	public CompanionMode mode() {
@@ -149,6 +156,10 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 
 	public int xp() {
 		return xp;
+	}
+
+	public boolean inCombat() {
+		return entityData.get(COMBAT);
 	}
 
 	public int action() {
@@ -333,6 +344,7 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 
 	@Override
 	public boolean doHurtTarget(Entity target) {
+		combatTicks = 60;
 		boolean hit = super.doHurtTarget(target);
 		if (hit && target instanceof LivingEntity living) {
 			energy = Math.min(MAX_ENERGY, energy + 10);
@@ -351,6 +363,14 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 		if (actionTicks > 0 && --actionTicks == 0) {
 			entityData.set(ACTION, ACTION_NONE);
 		}
+		if (getTarget() != null && getTarget().isAlive() || getLastHurtByMob() != null && tickCount - getLastHurtByMobTimestamp() < 60) {
+			combatTicks = 60;
+		} else if (combatTicks > 0) {
+			combatTicks--;
+		}
+		entityData.set(COMBAT, combatTicks > 0);
+		// Sprinting (synced) while chasing or catching up, so clients pick the run animation; strolling stays a walk.
+		setSprinting(getNavigation().isInProgress() && getMoveControl().getSpeedModifier() >= 1.05);
 
 		LivingEntity target = getTarget();
 		if (target == null || !target.isAlive() || distanceToSqr(target) > 36) {
@@ -502,7 +522,16 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 			if (isInSittingPose()) {
 				return state.setAndContinue(SIT);
 			}
-			return state.setAndContinue(state.isMoving() ? WALK : IDLE);
+			if (isInWater()) {
+				return state.setAndContinue(SWIM);
+			}
+			if (!onGround() && !isPassenger()) {
+				return state.setAndContinue(JUMP);
+			}
+			if (state.isMoving()) {
+				return state.setAndContinue(isSprinting() ? RUN : WALK);
+			}
+			return state.setAndContinue(IDLE);
 		}));
 	}
 

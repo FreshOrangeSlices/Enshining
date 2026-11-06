@@ -17,6 +17,7 @@ Planned next: Childe (Hydro) and Lumine (Dendro + Hydro to start).
 
 - **Befriend:** right-click a wild companion with its gift (a 1 in 3 chance each time). Noelle spawns in forests.
 - **Modes:** right-click your companion with an empty hand: Follow → Wander (roams near that spot) → Stay.
+- **Weapons** only appear in a fight, like in Genshin.
 - **Status:** sneak + right-click with an empty hand: level, XP and burst energy.
 - **Heal:** right-click with its gift.
 - **Levels:** companions earn XP from kills (up to level 40); each level adds 2 health and 0.5 attack.
@@ -32,7 +33,7 @@ and a `weapon` bone in the right hand (on the forearm). That means:
 
 - **Textures are Minecraft skins.** Any 64x64 slim-arm skin fits; paint it in any skin editor. The texture is 128x64:
   the skin on the left half, the weapon's pixels on the right.
-- **Shared animations:** idle, walk, sit and hurt are the same for everyone (`docs/art/companion_base.animation.json`).
+- **Shared animations:** idle, walk, run (chasing or catching up), jump (in the air), swim, sit and hurt are the same for everyone (`docs/art/companion_base.animation.json`).
   A new character's animation file is that one plus its own attack, skill and burst.
 - **Tools:** [Blockbench](https://www.blockbench.net) with the GeckoLib plugin opens the model and animations.
 

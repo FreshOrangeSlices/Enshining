@@ -1,18 +1,15 @@
 package com.freshorangeslices.enshining.client;
 
-import com.freshorangeslices.enshining.Enshining;
 import com.freshorangeslices.enshining.character.noelle.NoelleEntity;
-import net.minecraft.resources.ResourceLocation;
 import software.bernie.geckolib.core.animatable.model.CoreGeoBone;
 import software.bernie.geckolib.core.animation.AnimationState;
-import software.bernie.geckolib.model.DefaultedEntityGeoModel;
 
 /** Noelle's model: the shared rig, plus her claymore growing during Sweeping Time. */
-public class NoelleModel extends DefaultedEntityGeoModel<NoelleEntity> {
+public class NoelleModel extends CompanionModel<NoelleEntity> {
 	public static final float BURST_CLAYMORE_SCALE = 1.8F;
 
 	public NoelleModel() {
-		super(new ResourceLocation(Enshining.MODID, "noelle"), true);
+		super("noelle");
 	}
 
 	@Override
