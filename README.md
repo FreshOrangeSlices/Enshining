@@ -33,6 +33,8 @@ and a `weapon` bone in the right hand (on the forearm). That means:
 
 - **Textures are Minecraft skins.** Any 64x64 slim-arm skin fits; paint it in any skin editor. The texture is 128x64:
   the skin on the left half, the weapon's pixels on the right.
+- **Walking and running** use Minecraft's own humanoid swing (in code) until a character's file has a real `walk` or `run`;
+  a Blockbench animation always wins for the bones it moves.
 - **Shared animations:** idle, walk, run (chasing or catching up), jump (in the air), swim, sit and hurt are the same for everyone (`docs/art/companion_base.animation.json`).
   A new character's animation file is that one plus its own attack, skill and burst.
 - **Tools:** [Blockbench](https://www.blockbench.net) with the GeckoLib plugin opens the model and animations.

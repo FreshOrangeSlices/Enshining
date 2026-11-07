@@ -20,6 +20,8 @@ public class CompanionModel<T extends CompanionEntity> extends DefaultedEntityGe
 		if (weapon != null) {
 			weapon.setHidden(!companion.inCombat());
 		}
+		vanillaLimbs(companion, state);
+
 		// Cloth sway: skirt tiers and ribbon tails swing with each step, a beat behind the piece above, and breathe
 		// when still. Heavier (bigger, slower) when running or in the air. Each piece has a hard limit, and the whole
 		// chain added up stays small, so the skirt can never flip up.
@@ -51,6 +53,32 @@ public class CompanionModel<T extends CompanionEntity> extends DefaultedEntityGe
 		float idle = (float) Math.sin(time * 0.06F - lag) * strength * 0.4F;
 		float x = clamp(walk + idle + trail, limit);
 		float z = clamp((float) Math.cos(time * 0.045F - lag) * strength * 0.3F, limit * 0.5F);
+		bone.setRotX(bone.getInitialSnapshot().getRotX() + x);
+		bone.setRotZ(bone.getInitialSnapshot().getRotZ() + z);
+	}
+
+	/**
+	 * Minecraft's own humanoid walk (the formula players, villagers and zombies use): legs and arms swing with how far
+	 * and fast she's actually moving, and the arms bob a little when still. A fallback: any bone a real animation
+	 * moves this frame (a Blockbench walk, run, attack...) is left to that animation.
+	 */
+	private void vanillaLimbs(T companion, AnimationState<T> state) {
+		float swing = state.getLimbSwing() * 0.6662F;
+		float amount = Math.min(1.0F, state.getLimbSwingAmount());
+		float age = companion.tickCount + state.getPartialTick();
+		float armBobZ = (float) Math.cos(age * 0.09F) * 0.05F + 0.05F;
+		float armBobX = (float) Math.sin(age * 0.067F) * 0.05F;
+		limb("right_leg", (float) Math.cos(swing) * 1.4F * amount, 0);
+		limb("left_leg", (float) Math.cos(swing + Math.PI) * 1.4F * amount, 0);
+		limb("right_arm", (float) Math.cos(swing + Math.PI) * amount + armBobX, armBobZ);
+		limb("left_arm", (float) Math.cos(swing) * amount - armBobX, -armBobZ);
+	}
+
+	private void limb(String name, float x, float z) {
+		CoreGeoBone bone = getAnimationProcessor().getBone(name);
+		if (bone == null || bone.hasRotationChanged()) {
+			return;
+		}
 		bone.setRotX(bone.getInitialSnapshot().getRotX() + x);
 		bone.setRotZ(bone.getInitialSnapshot().getRotZ() + z);
 	}
