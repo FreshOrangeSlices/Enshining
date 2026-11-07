@@ -182,6 +182,12 @@ public class NoelleEntity extends CompanionEntity {
 		}
 	}
 
+	/** Sweeping Time: the claymore's reach doubles, like in Genshin. */
+	@Override
+	public double meleeReachScale() {
+		return burstActive() ? 2.0 : 1.0;
+	}
+
 	@Override
 	protected void onHit(LivingEntity target) {
 		ServerLevel server = level() instanceof ServerLevel s ? s : null;
@@ -208,13 +214,13 @@ public class NoelleEntity extends CompanionEntity {
 		if (burstActive()) {
 			float sweep = (float) getAttributeValue(Attributes.ATTACK_DAMAGE) * 0.5F;
 			for (LivingEntity near : level().getEntitiesOfClass(LivingEntity.class, target.getBoundingBox().inflate(2.5),
-					e -> e != target && e != this && e instanceof Enemy && e.isAlive())) {
+					e -> e != target && e != this && e instanceof Enemy && e.isAlive() && e.distanceToSqr(this) < 4.5 * 4.5)) {
 				near.hurt(damageSources().mobAttack(this), sweep);
 			}
 			if (server != null) {
 				Vec3 from = position().add(0, 1.0, 0);
-				Fx.arc(server, element().dust(), from, getYRot(), 2.2, 160, 28, 0.5);
-				Fx.arc(server, ParticleTypes.WAX_OFF, from, getYRot(), 2.0, 140, 10, 0.4);
+				Fx.arc(server, element().dust(), from, getYRot(), 3.6, 160, 44, 0.6);
+				Fx.arc(server, ParticleTypes.WAX_OFF, from, getYRot(), 3.3, 140, 16, 0.5);
 				server.sendParticles(ParticleTypes.SWEEP_ATTACK, target.getX(), target.getY(0.5), target.getZ(), 3, 0.8, 0.2, 0.8, 0);
 				Fx.shards(server, Blocks.GOLD_BLOCK.defaultBlockState(), target.position().add(0, target.getBbHeight() / 2, 0), 12, 0.4);
 			}

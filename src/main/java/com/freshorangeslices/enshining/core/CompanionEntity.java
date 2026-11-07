@@ -109,6 +109,11 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 	/** The burst, used in a fight once energy is full enough. */
 	public abstract void useBurst(LivingEntity target);
 
+	/** How far her melee reaches compared to normal (Noelle's burst doubles it). */
+	public double meleeReachScale() {
+		return 1.0;
+	}
+
 	/** Called after each landed melee hit, for effects that ride on hits (heals, sweeps). */
 	protected void onHit(LivingEntity target) {
 	}
@@ -296,7 +301,13 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 				setInSittingPose(false);
 			}
 		});
-		goalSelector.addGoal(4, new MeleeAttackGoal(this, 1.15, true));
+		goalSelector.addGoal(4, new MeleeAttackGoal(this, 1.15, true) {
+			@Override
+			protected double getAttackReachSqr(LivingEntity target) {
+				double reach = meleeReachScale();
+				return super.getAttackReachSqr(target) * reach * reach;
+			}
+		});
 		goalSelector.addGoal(5, new FollowOwnerGoal(this, 1.1, 8.0F, 3.0F, false) {
 			@Override
 			public boolean canUse() {

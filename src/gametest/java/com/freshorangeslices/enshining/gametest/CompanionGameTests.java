@@ -127,6 +127,7 @@ public final class CompanionGameTests {
 		double before = noelle.getAttributeValue(Attributes.ATTACK_DAMAGE);
 		noelle.useBurst(zombie);
 		helper.assertTrue(noelle.burstActive() && noelle.sweeping(), "Sweeping Time is on (and synced)");
+		helper.assertTrue(noelle.meleeReachScale() == 2.0, "Her reach doubles");
 		helper.assertTrue(noelle.getAttributeValue(Attributes.ATTACK_DAMAGE) == before + 4.0, "Half her 8 armor as attack");
 		helper.succeed();
 	}
