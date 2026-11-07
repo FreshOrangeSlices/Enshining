@@ -1,0 +1,14 @@
+name: peek
+on:
+  push:
+    branches: [ci/peek]
+jobs:
+  peek:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: study Migamigos' Shybroom model
+        run: |
+          url=$(curl -s "https://api.modrinth.com/v2/project/migamigos/version" | python3 -c "import json,sys;v=[x for x in json.load(sys.stdin) if 'forge' in x['loaders'] and '1.20.1' in x['game_versions']][0];print(v['files'][0]['url'])")
+          curl -sL "$url" -o miga.jar
+          python3 tools/peek_geo.py miga.jar shybroom || python3 tools/peek_geo.py miga.jar broom
