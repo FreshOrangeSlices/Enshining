@@ -85,6 +85,7 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 	private int actionTicks;
 	private int combatTicks;
 	private boolean wasSwinging; // client side, to restart the attack animation on each new swing
+	private boolean playingMove; // client side: an attack, skill or burst animation is playing
 
 	protected CompanionEntity(EntityType<? extends TamableAnimal> type, Level level) {
 		super(type, level);
@@ -165,6 +166,11 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 
 	public boolean inCombat() {
 		return entityData.get(COMBAT);
+	}
+
+	/** Client side: true while an attack, skill or burst animation is playing (the head follows the animation then). */
+	public boolean playingMove() {
+		return playingMove;
 	}
 
 	public int action() {
@@ -515,6 +521,7 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 	public void registerControllers(AnimatableManager.ControllerRegistrar controllers) {
 		controllers.add(new AnimationController<>(this, "main", 3, state -> {
 			int action = action();
+			playingMove = true;
 			if (action == ACTION_BURST) {
 				return state.setAndContinue(burstAnimation());
 			}
@@ -530,6 +537,7 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 			if (state.isCurrentAnimation(ATTACK) && !state.getController().hasAnimationFinished()) {
 				return PlayState.CONTINUE;
 			}
+			playingMove = false;
 			if (isInSittingPose()) {
 				return state.setAndContinue(SIT);
 			}
