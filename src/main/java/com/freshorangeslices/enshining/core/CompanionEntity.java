@@ -20,6 +20,7 @@ import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.TamableAnimal;
+import net.minecraft.world.phys.Vec3;
 import net.minecraft.world.entity.monster.Enemy;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.util.Mth;
@@ -247,12 +248,28 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 		return entityData.get(COMBAT);
 	}
 
+	private boolean calmPose = true;   // client side: idle or walking (the back weapon may show); not run/jump/swim/sit
+	private int ticksSinceFight = 1000; // client side
+	private boolean backWeaponShown;   // client side, for the summon/unsummon sparkle
 	private float lookBlend = 1.0F;  // client side: how much the head looks at things (0 in a fight), eased per tick
 	private float lookBlendO = 1.0F;
 
 	/** Client side: 0..1, how much the head should follow the look direction this frame (eases in and out). */
 	public float lookBlend(float partialTick) {
 		return Mth.lerp(partialTick, lookBlendO, lookBlend);
+	}
+
+	/** Seconds the claymore keeps hovering behind her after a fight before she dismisses it. */
+	protected int backWeaponLingerTicks() {
+		return 100;
+	}
+
+	/**
+	 * Client side: whether the weapon hovers behind her (the "weapon_back" bone): just after attacking or a fight,
+	 * while she's standing or walking. Running, jumping, swimming or sitting dismiss it, and so does time.
+	 */
+	public boolean showBackWeapon() {
+		return !playingMove && calmPose && (inCombat() || ticksSinceFight < backWeaponLingerTicks());
 	}
 
 	/** Client side: true while an attack, skill or burst animation is playing (the head follows the animation then). */
@@ -340,6 +357,17 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 			lookBlendO = lookBlend;
 			float want = playingMove || inCombat() ? 0.0F : 1.0F;
 			lookBlend += Mth.clamp(want - lookBlend, -0.1F, 0.1F); // half a second to ease the look in or out
+			ticksSinceFight = playingMove || inCombat() ? 0 : ticksSinceFight + 1;
+			boolean back = showBackWeapon();
+			if (back != backWeaponShown) {
+				backWeaponShown = back;
+				// The claymore is summoned behind her (or dismissed) with a little sparkle.
+				Vec3 behind = position().add(Vec3.directionFromRotation(0, yBodyRot).scale(-0.45)).add(0, 1.15, 0);
+				for (int i = 0; i < 6; i++) {
+					level().addParticle(element().dust(), behind.x + (random.nextDouble() - 0.5) * 0.4,
+							behind.y + (random.nextDouble() - 0.5) * 0.8, behind.z + (random.nextDouble() - 0.5) * 0.4, 0, 0.02, 0);
+				}
+			}
 		}
 		// Locked facing for the whole of a hit: the AI's look/turn this tick is undone before it's sent to players.
 		if (!level().isClientSide && comboPieceTicks > 0) {
@@ -859,6 +887,7 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 				return PlayState.CONTINUE;
 			}
 			playingMove = false;
+			calmPose = false;
 			if (isInSittingPose()) {
 				return state.setAndContinue(SIT);
 			}
@@ -869,8 +898,10 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 				return state.setAndContinue(JUMP);
 			}
 			if (state.isMoving()) {
+				calmPose = !isSprinting();
 				return state.setAndContinue(isSprinting() ? RUN : WALK);
 			}
+			calmPose = true;
 			return state.setAndContinue(IDLE);
 		}));
 	}

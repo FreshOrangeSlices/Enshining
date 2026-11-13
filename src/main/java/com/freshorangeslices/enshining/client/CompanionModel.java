@@ -16,7 +16,7 @@ import software.bernie.geckolib.core.animation.AnimationState;
 import software.bernie.geckolib.core.keyframe.BoneAnimation;
 import software.bernie.geckolib.model.DefaultedEntityGeoModel;
 
-/** The shared rig's model: reads NAME's files, turns the head, and only shows the weapon in a fight (like Genshin). */
+/** The shared rig's model: reads NAME's files, turns the head, shows the weapon in hand or hovering behind her. */
 public class CompanionModel<T extends CompanionEntity> extends DefaultedEntityGeoModel<T> {
 	public CompanionModel(String name) {
 		super(new ResourceLocation(Enshining.MODID, name), true);
@@ -73,6 +73,14 @@ public class CompanionModel<T extends CompanionEntity> extends DefaultedEntityGe
 			// Out only while she's swinging, holding a hit's pose, or casting (like Genshin): her walk and run were
 			// made without the claymore, and carrying it through them drags the blade through the ground.
 			weapon.setHidden(!companion.playingMove());
+		}
+		// The claymore hovering behind her after a fight (a separate bone, if the model has one), bobbing gently.
+		CoreGeoBone back = getAnimationProcessor().getBone("weapon_back");
+		if (back != null) {
+			back.setHidden(!companion.showBackWeapon());
+			float t = companion.tickCount + state.getPartialTick();
+			back.setPosY(back.getInitialSnapshot().getOffsetY() + (float) Math.sin(t * 0.08) * 0.5F);
+			back.setRotZ(back.getInitialSnapshot().getRotZ() + (float) Math.sin(t * 0.05) * 0.03F);
 		}
 		Set<String> animated = animatedBones(state);
 		vanillaLimbs(companion, state, animated);
