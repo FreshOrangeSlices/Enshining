@@ -21,7 +21,9 @@ public class CompanionModel<T extends CompanionEntity> extends DefaultedEntityGe
 		// head turn is added on top of the look direction.
 		CoreGeoBone head = getAnimationProcessor().getBone("head");
 		float animX = 0, animY = 0;
-		if (head != null) {
+		// Only when this frame's animation actually keyed the head: otherwise the head still holds last frame's
+		// look turn, and adding it again every frame would spin her head round.
+		if (head != null && head.hasRotationChanged()) {
 			animX = head.getRotX() - head.getInitialSnapshot().getRotX();
 			animY = head.getRotY() - head.getInitialSnapshot().getRotY();
 		}
