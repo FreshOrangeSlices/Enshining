@@ -25,6 +25,12 @@ public class NoelleFullComboEntity extends NoelleEntity {
 		return FULL_COMBO;
 	}
 
+	/** One long animation has no gaps between hits, so she isn't planted; the 2-block budget still applies. */
+	@Override
+	protected boolean plantedDuringHits() {
+		return false;
+	}
+
 	@Override
 	protected RawAnimation comboEndAnimation() {
 		return null; // the ending is already part of the one animation

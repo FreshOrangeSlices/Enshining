@@ -186,6 +186,11 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 		return 0;
 	}
 
+	/** Whether she stands still while a combo animation plays (else only the travel budget limits her). */
+	protected boolean plantedDuringHits() {
+		return true;
+	}
+
 	/** How far (blocks) she may move in total over one whole combo. */
 	protected double comboTravel() {
 		return 2.0;
@@ -628,7 +633,7 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 			getNavigation().stop();
 			getMoveControl().setWantedPosition(getX(), getY(), getZ(), 0.0);
 		}
-		if (comboPieceTicks > 0) {
+		if (comboPieceTicks > 0 && plantedDuringHits()) {
 			// Planted while a hit plays: no sliding along in the middle of a swing, just turn to face the target.
 			getNavigation().stop();
 			getMoveControl().setWantedPosition(getX(), getY(), getZ(), 0.0);
