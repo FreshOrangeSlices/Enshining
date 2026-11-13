@@ -291,6 +291,12 @@ public class NoelleEntity extends CompanionEntity {
 		return 2.2917;
 	}
 
+	/** The claymore's swing: 2.5 blocks (her burst doubles it). */
+	@Override
+	public double meleeReach() {
+		return 2.5;
+	}
+
 	@Override
 	protected int skillAnimationTicks() {
 		return 26; // her skill animation is 1.3s
