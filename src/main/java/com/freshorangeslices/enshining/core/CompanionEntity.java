@@ -1,5 +1,6 @@
 package com.freshorangeslices.enshining.core;
 
+import java.util.List;
 import java.util.UUID;
 import javax.annotation.Nullable;
 import net.minecraft.core.particles.ParticleOptions;
@@ -63,6 +64,11 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 	private static final EntityDataAccessor<Integer> ACTION = SynchedEntityData.defineId(CompanionEntity.class, EntityDataSerializers.INT);
 	/** In a fight (a target, or hit or hitting in the last 3 seconds): synced, so the weapon only shows then, like in Genshin. */
 	private static final EntityDataAccessor<Boolean> COMBAT = SynchedEntityData.defineId(CompanionEntity.class, EntityDataSerializers.BOOLEAN);
+	/** The combo, packed: (count of hits started << 3) | phase. Phase 0 = none, 1..n = combo hit n, 7 = the ending. */
+	private static final EntityDataAccessor<Integer> COMBO = SynchedEntityData.defineId(CompanionEntity.class, EntityDataSerializers.INT);
+	private static final int COMBO_END_PHASE = 7;
+	/** How long (ticks) she lingers on a combo hit's last frame waiting for the next one before the combo resets. */
+	private static final int COMBO_WINDOW_TICKS = 20;
 	public static final int ACTION_NONE = 0;
 	public static final int ACTION_SKILL = 1;
 	public static final int ACTION_BURST = 2;
@@ -86,6 +92,16 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 	private int combatTicks;
 	private boolean wasSwinging; // client side, to restart the attack animation on each new swing
 	private boolean playingMove; // client side: an attack, skill or burst animation is playing
+	// Combo, server side
+	private int comboNext;        // which hit comes next (0-based)
+	private int comboCount;       // hits started, so clients can tell a new hit from the same one
+	private int comboPieceTicks;  // ticks left in the hit being played
+	private int comboWindowTicks; // ticks left to continue the combo after a hit
+	private int comboEndTicks;    // ticks left in the ending
+	private int comboHitTicks;    // ticks until the current hit's impact lands
+	@Nullable
+	private LivingEntity comboTarget;
+	private int comboSeen = -1;   // client side: the last hit this client started playing
 
 	protected CompanionEntity(EntityType<? extends TamableAnimal> type, Level level) {
 		super(type, level);
@@ -123,6 +139,40 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 	protected void tickAbilities() {
 	}
 
+	/**
+	 * One hit of a melee combo: its animation, its length and when its impact lands, both in seconds as animated in
+	 * Blockbench (before {@link #comboSpeed()}).
+	 */
+	public record ComboHit(RawAnimation animation, double length, double impact) {
+		public ComboHit(String animation, double length, double impact) {
+			this(RawAnimation.begin().thenPlayAndHold(animation), length, impact);
+		}
+	}
+
+	/** The melee combo, hit by hit; empty for a character that just uses the single attack animation. */
+	protected List<ComboHit> comboHits() {
+		return List.of();
+	}
+
+	/** The animation after the last hit when nothing follows, and its length in seconds (as animated). */
+	@Nullable
+	protected RawAnimation comboEndAnimation() {
+		return null;
+	}
+
+	protected double comboEndLength() {
+		return 0;
+	}
+
+	/** How much faster than animated the combo plays in-game. */
+	protected double comboSpeed() {
+		return 1.0;
+	}
+
+	private int comboTicks(double seconds) {
+		return Math.max(1, (int) Math.round(seconds / comboSpeed() * 20));
+	}
+
 	/** The skill and burst animations, named in the character's animation file. */
 	protected abstract RawAnimation skillAnimation();
 
@@ -137,6 +187,7 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 		entityData.define(LEVEL, 1);
 		entityData.define(ACTION, ACTION_NONE);
 		entityData.define(COMBAT, false);
+		entityData.define(COMBO, 0);
 	}
 
 	public CompanionMode mode() {
@@ -181,6 +232,67 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 	protected void playAction(int action, int ticks) {
 		entityData.set(ACTION, action);
 		actionTicks = ticks;
+		resetCombo();
+	}
+
+	// ---- Combo ------------------------------------------------------------------------------------------------
+
+	/** Server side: whether she's free to start the next combo hit (none playing, no skill or burst). */
+	public boolean canStartComboHit() {
+		return !comboHits().isEmpty() && comboPieceTicks == 0 && action() == ACTION_NONE;
+	}
+
+	/** Server side: start the next hit of the combo on this target; its damage lands at the hit's impact time. */
+	public void startComboHit(LivingEntity target) {
+		List<ComboHit> hits = comboHits();
+		int index = comboNext;
+		ComboHit hit = hits.get(index);
+		comboNext = (index + 1) % hits.size();
+		comboCount = (comboCount + 1) & 0xFFFFF;
+		comboPieceTicks = comboTicks(hit.length());
+		comboHitTicks = Math.min(comboPieceTicks, comboTicks(hit.impact()));
+		comboWindowTicks = 0;
+		comboEndTicks = 0;
+		comboTarget = target;
+		combatTicks = 60;
+		entityData.set(COMBO, comboCount << 3 | (index + 1));
+	}
+
+	private void resetCombo() {
+		comboNext = 0;
+		comboPieceTicks = 0;
+		comboWindowTicks = 0;
+		comboEndTicks = 0;
+		comboHitTicks = 0;
+		comboTarget = null;
+		entityData.set(COMBO, comboCount << 3);
+	}
+
+	private void tickCombo() {
+		if (comboHitTicks > 0 && --comboHitTicks == 0) {
+			LivingEntity target = comboTarget;
+			comboTarget = null;
+			double reach = getBbWidth() * 2.0F * meleeReachScale() + 1.5;
+			if (target != null && target.isAlive() && distanceTo(target) <= reach + target.getBbWidth()) {
+				doHurtTarget(target);
+			}
+		}
+		if (comboPieceTicks > 0 && --comboPieceTicks == 0) {
+			if (comboNext == 0 && comboEndAnimation() != null) {
+				// The last hit: play the ending unless the next fight swing starts a new combo first.
+				comboEndTicks = comboTicks(comboEndLength());
+				comboCount = (comboCount + 1) & 0xFFFFF;
+				entityData.set(COMBO, comboCount << 3 | COMBO_END_PHASE);
+			} else {
+				comboWindowTicks = COMBO_WINDOW_TICKS;
+			}
+		}
+		if (comboWindowTicks > 0 && --comboWindowTicks == 0) {
+			resetCombo();
+		}
+		if (comboEndTicks > 0 && --comboEndTicks == 0) {
+			resetCombo();
+		}
 	}
 
 	/** How long the skill and burst animations last, in ticks (their animation_length times 20). */
@@ -313,6 +425,18 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 				double reach = meleeReachScale();
 				return super.getAttackReachSqr(target) * reach * reach;
 			}
+
+			@Override
+			protected void checkAndPerformAttack(LivingEntity target, double distanceSqr) {
+				if (comboHits().isEmpty()) {
+					super.checkAndPerformAttack(target, distanceSqr);
+					return;
+				}
+				// The combo sets its own pace: the next hit starts as soon as the last one has played.
+				if (distanceSqr <= getAttackReachSqr(target) && canStartComboHit()) {
+					startComboHit(target);
+				}
+			}
 		});
 		goalSelector.addGoal(5, new FollowOwnerGoal(this, 1.1, 8.0F, 3.0F, false) {
 			@Override
@@ -377,6 +501,7 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 			skillCooldown--;
 		}
 		tickAbilities();
+		tickCombo();
 		if (actionTicks > 0 && --actionTicks == 0) {
 			entityData.set(ACTION, ACTION_NONE);
 		}
@@ -390,7 +515,7 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 		setSprinting(getNavigation().isInProgress() && getMoveControl().getSpeedModifier() >= 1.05);
 
 		LivingEntity target = getTarget();
-		if (target == null || !target.isAlive() || distanceToSqr(target) > 36) {
+		if (target == null || !target.isAlive() || distanceToSqr(target) > 36 || comboPieceTicks > 0) {
 			return;
 		}
 		if (energy >= burstCost()) {
@@ -528,6 +653,13 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 			if (action == ACTION_SKILL) {
 				return state.setAndContinue(skillAnimation());
 			}
+			if (!comboHits().isEmpty()) {
+				PlayState combo = comboState(state);
+				if (combo != null) {
+					return combo;
+				}
+			}
+			state.getController().setAnimationSpeed(1.0);
 			boolean newSwing = swinging && !wasSwinging;
 			wasSwinging = swinging;
 			if (newSwing) {
@@ -552,6 +684,37 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 			}
 			return state.setAndContinue(IDLE);
 		}));
+	}
+
+	/**
+	 * The combo on the client: a new hit restarts its animation, which then holds on its last frame through the
+	 * window (unless she's moving, then the legs take over); the ending plays once. Null means no combo is showing.
+	 */
+	@Nullable
+	private PlayState comboState(software.bernie.geckolib.core.animation.AnimationState<CompanionEntity> state) {
+		int packed = entityData.get(COMBO);
+		int phase = packed & 7;
+		int count = packed >>> 3;
+		if (phase == 0) {
+			comboSeen = count;
+			return null;
+		}
+		RawAnimation animation = phase == COMBO_END_PHASE ? comboEndAnimation() : comboHits().get(Math.min(phase, comboHits().size()) - 1).animation();
+		if (animation == null) {
+			return null;
+		}
+		var controller = state.getController();
+		if (count != comboSeen) {
+			comboSeen = count;
+			controller.setAnimationSpeed(comboSpeed());
+			controller.forceAnimationReset();
+			return state.setAndContinue(animation);
+		}
+		boolean done = !state.isCurrentAnimation(animation) || controller.hasAnimationFinished();
+		if (phase == COMBO_END_PHASE ? done : (done && state.isMoving()) || !state.isCurrentAnimation(animation)) {
+			return null;
+		}
+		return PlayState.CONTINUE;
 	}
 
 	@Override

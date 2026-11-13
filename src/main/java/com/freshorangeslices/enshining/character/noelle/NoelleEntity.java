@@ -1,5 +1,7 @@
 package com.freshorangeslices.enshining.character.noelle;
 
+import java.util.List;
+
 import com.freshorangeslices.enshining.core.CompanionEntity;
 import com.freshorangeslices.enshining.core.Element;
 import com.freshorangeslices.enshining.core.Fx;
@@ -42,6 +44,16 @@ public class NoelleEntity extends CompanionEntity {
 	private static final EntityDataAccessor<Boolean> SWEEPING = SynchedEntityData.defineId(NoelleEntity.class, EntityDataSerializers.BOOLEAN);
 	private static final RawAnimation SKILL = RawAnimation.begin().thenPlay("animation.noelle.skill");
 	private static final RawAnimation BURST = RawAnimation.begin().thenPlay("animation.noelle.burst");
+	/**
+	 * Her four-hit combo, cut from one long Blockbench animation (lengths and impact times in seconds as animated):
+	 * 0-0.6667, 0.6667-1.7917, 1.7917-2.4583, 2.4583-3.0833, then the ending 3.0833-5.1667.
+	 */
+	private static final List<ComboHit> COMBO = List.of(
+			new ComboHit("animation.noelle.attack1", 0.6667, 0.4167),
+			new ComboHit("animation.noelle.attack2", 1.125, 0.5417),
+			new ComboHit("animation.noelle.attack3", 0.6667, 0.6667),
+			new ComboHit("animation.noelle.attack4", 0.625, 0.625));
+	private static final RawAnimation COMBO_END = RawAnimation.begin().thenPlay("animation.noelle.combo_end");
 
 	private int shieldTicks;
 	private int burstTicks;
@@ -262,6 +274,32 @@ public class NoelleEntity extends CompanionEntity {
 				}
 			}
 		}
+	}
+
+	@Override
+	protected List<ComboHit> comboHits() {
+		return COMBO;
+	}
+
+	@Override
+	protected RawAnimation comboEndAnimation() {
+		return COMBO_END;
+	}
+
+	@Override
+	protected double comboEndLength() {
+		return 2.0833;
+	}
+
+	/** The animation is timed to a slowed-down reference; in-game she swings at Genshin speed. */
+	@Override
+	protected double comboSpeed() {
+		return 1.4;
+	}
+
+	@Override
+	protected int skillAnimationTicks() {
+		return 26; // her skill animation is 1.3s
 	}
 
 	@Override
