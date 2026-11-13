@@ -20,6 +20,8 @@ import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.TamableAnimal;
+import net.minecraft.world.entity.monster.Enemy;
+import net.minecraft.world.entity.Mob;
 import net.minecraft.util.Mth;
 import net.minecraft.world.entity.ai.attributes.AttributeInstance;
 import net.minecraft.world.entity.ai.attributes.AttributeModifier;
@@ -104,12 +106,11 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 	private int comboImpactIndex; // impacts already landed
 	private int comboElapsed;     // ticks into the current hit
 	private int comboCancelTicks; // ticks until the next hit may cancel this one's recovery
-	private int comboRestTicks;   // after a finisher: a breather before a new combo starts
 	@Nullable
 	private LivingEntity comboTarget;
 	private int comboSeen = -1;   // client side: the last hit this client started playing
 	private boolean comboShowing; // client side: a combo animation was showing last frame
-	private double comboTravelled; // blocks moved since the combo started
+	private double comboTravelled; // blocks moved since the current hit started
 	@Nullable
 	private net.minecraft.world.phys.Vec3 comboLastPos;
 	private float comboYaw;
@@ -186,14 +187,9 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 		return 0;
 	}
 
-	/** Whether she stands still while a combo animation plays (else only the travel budget limits her). */
-	protected boolean plantedDuringHits() {
-		return true;
-	}
-
-	/** How far (blocks) she may move in total over one whole combo. */
+	/** How far (blocks) she may step forward with each combo hit. */
 	protected double comboTravel() {
-		return 2.0;
+		return 0.5;
 	}
 
 	/** How much faster than animated the combo plays in-game. */
@@ -282,20 +278,12 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 		if (comboHits().isEmpty() || action() != ACTION_NONE) {
 			return false;
 		}
-		if (comboNext == 0 && comboRestTicks > 0) {
-			return false; // catching her breath after a full combo
-		}
 		// Animation cancel: once the hit has landed (plus a beat), the next one can cut its recovery short.
 		return comboPieceTicks == 0 || comboImpactIndex >= comboImpacts.length && comboCancelTicks <= 0;
 	}
 
 	/** Her melee reach in blocks from her middle to the target's edge: the length of the weapon swing. */
 	public double meleeReach() {
-		return 2.0;
-	}
-
-	/** Seconds she waits after a full combo before starting the next one. */
-	protected double comboRest() {
 		return 2.0;
 	}
 
@@ -322,9 +310,7 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 		int lastImpact = comboImpacts.length == 0 ? 0 : comboImpacts[comboImpacts.length - 1];
 		comboCancelTicks = Math.min(comboPieceTicks,
 				Math.max(lastImpact + comboTicks(comboCancelDelay()), (int) Math.ceil(hit.motionEnd() / comboSpeed() * 20) + 1));
-		if (comboNext == 0) {
-			comboRestTicks = comboPieceTicks + (int) Math.round(comboRest() * 20); // the finisher, then a breather
-		}
+		comboTravelled = 0; // each hit gets its own small step forward
 		comboWindowTicks = 0;
 		comboEndTicks = 0;
 		comboTarget = target;
@@ -377,28 +363,38 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 		if (comboCancelTicks > 0) {
 			comboCancelTicks--;
 		}
-		if (comboRestTicks > 0) {
-			comboRestTicks--;
-		}
 		if (comboPieceTicks > 0) {
 			comboElapsed++;
 			while (comboImpactIndex < comboImpacts.length && comboElapsed >= comboImpacts[comboImpactIndex]) {
 				comboImpactIndex++;
-				LivingEntity target = comboTarget;
-				if (target != null && target.isAlive()
-						&& distanceTo(target) <= meleeReach() * meleeReachScale() + target.getBbWidth() / 2.0 + 0.5) { // a little give
+				LivingEntity target = comboFoe(0.5); // a little give
+				if (target != null) {
 					doHurtTarget(target);
 				}
 			}
 		}
 		if (comboPieceTicks > 0 && --comboPieceTicks == 0) {
-			if (comboNext == 0 && comboEndAnimation() != null) {
-				// The last hit: play the ending unless the next fight swing starts a new combo first.
+			LivingEntity next = comboFoe(0.0);
+			if (next != null && action() == ACTION_NONE) {
+				// Something's still in reach: straight into the next hit (after the finisher, back to hit 1), no idling.
+				setTarget(next);
+				startComboHit(next);
+			} else if (comboNext == 0 && comboEndAnimation() != null) {
+				// The last hit and nothing left in reach: the ending, unless something steps in and starts a new combo.
 				comboEndTicks = comboTicks(comboEndLength());
 				comboCount = (comboCount + 1) & 0xFFFFF;
 				entityData.set(COMBO, comboCount << 3 | COMBO_END_PHASE);
 			} else {
 				comboWindowTicks = COMBO_WINDOW_TICKS;
+			}
+		}
+		// Holding a pose or in the ending: anything hostile stepping into reach picks the combo back up.
+		if ((comboWindowTicks > 0 || comboEndTicks > 0) && canStartComboHit()) {
+			LivingEntity next = comboFoe(0.0);
+			if (next != null) {
+				setTarget(next);
+				startComboHit(next);
+				return;
 			}
 		}
 		if (comboWindowTicks > 0 && --comboWindowTicks == 0) {
@@ -407,6 +403,38 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 		if (comboEndTicks > 0 && --comboEndTicks == 0) {
 			resetCombo();
 		}
+		if (comboPieceTicks > 0 && comboCancelTicks <= 0 && comboImpactIndex >= comboImpacts.length && canStartComboHit()) {
+			// Animation cancel onto whoever is in reach (her target first), not only the one she started on.
+			LivingEntity next = comboFoe(0.0);
+			if (next != null && next != comboTarget) {
+				setTarget(next);
+				startComboHit(next);
+			}
+		}
+	}
+
+	private boolean inMeleeReach(LivingEntity target, double give) {
+		return distanceTo(target) <= meleeReach() * meleeReachScale() + target.getBbWidth() / 2.0 + give;
+	}
+
+	/**
+	 * Who the next hit is for: the current combo target or her target if still in reach, else (once she's someone's
+	 * companion) the nearest hostile in reach, so a combo flows from one mob to the next.
+	 */
+	@Nullable
+	private LivingEntity comboFoe(double give) {
+		for (LivingEntity candidate : new LivingEntity[] {comboTarget, getTarget()}) {
+			if (candidate != null && candidate.isAlive() && inMeleeReach(candidate, give) && canAttack(candidate)) {
+				return candidate;
+			}
+		}
+		if (!isTame()) {
+			return null;
+		}
+		double reach = meleeReach() * meleeReachScale() + 1.0 + give;
+		return level().getEntitiesOfClass(Mob.class, getBoundingBox().inflate(reach), mob -> mob instanceof Enemy && mob.isAlive()
+						&& !(mob instanceof TamableAnimal tame && tame.isTame()) && inMeleeReach(mob, give) && canAttack(mob))
+				.stream().min(java.util.Comparator.comparingDouble(this::distanceToSqr)).orElse(null);
 	}
 
 	/** How long the skill and burst animations last, in ticks (their animation_length times 20). */
@@ -618,8 +646,8 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 		tickAbilities();
 		tickCombo();
 		boolean comboActive = comboPieceTicks > 0 || comboWindowTicks > 0 || comboEndTicks > 0;
-		// Footwork budget: over a whole combo she covers at most comboTravel() blocks (at her normal pace between hits),
-		// then holds her ground until the combo ends and resets.
+		// Footwork: each hit lets her step up to comboTravel() blocks toward her foe (counted from the hit's start),
+		// then she holds her ground until the next hit.
 		if (comboActive) {
 			if (comboLastPos != null) {
 				comboTravelled += Math.sqrt(Math.pow(getX() - comboLastPos.x, 2) + Math.pow(getZ() - comboLastPos.z, 2));
@@ -630,11 +658,6 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 			comboLastPos = null;
 		}
 		if (comboActive && comboTravelled >= comboTravel()) {
-			getNavigation().stop();
-			getMoveControl().setWantedPosition(getX(), getY(), getZ(), 0.0);
-		}
-		if (comboPieceTicks > 0 && plantedDuringHits()) {
-			// Planted while a hit plays: no sliding along in the middle of a swing, just turn to face the target.
 			getNavigation().stop();
 			getMoveControl().setWantedPosition(getX(), getY(), getZ(), 0.0);
 		}

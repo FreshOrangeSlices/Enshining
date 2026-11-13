@@ -1,8 +1,6 @@
 {
   "entity.enshining.noelle": "Noelle",
   "item.enshining.noelle_spawn_egg": "Noelle Spawn Egg",
-  "entity.enshining.noelle_full_combo": "Noelle (Full Combo Test)",
-  "item.enshining.noelle_full_combo_spawn_egg": "Noelle (Full Combo Test) Spawn Egg",
   "enshining.mode.follow": "Following",
   "enshining.mode.wander": "Wandering",
   "enshining.mode.stay": "Staying",

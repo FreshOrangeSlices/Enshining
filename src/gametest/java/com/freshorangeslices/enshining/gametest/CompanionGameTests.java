@@ -150,17 +150,6 @@ public final class CompanionGameTests {
 	}
 
 	@GameTest(template = "empty", timeoutTicks = 200)
-	public static void fullComboNoelleFightsAHusk(GameTestHelper helper) {
-		NoelleEntity noelle = helper.spawn(ModEntities.NOELLE_FULL_COMBO.get(), new BlockPos(1, 2, 1));
-		noelle.befriend(player(helper));
-		Zombie husk = helper.spawn(EntityType.HUSK, new BlockPos(4, 2, 4));
-		husk.setPersistenceRequired();
-		float start = husk.getHealth();
-		helper.succeedWhen(() -> helper.assertTrue(husk.getHealth() < start || !husk.isAlive(),
-				"The full-combo test Noelle hits too (first impact 0.42s into the combo)"));
-	}
-
-	@GameTest(template = "empty", timeoutTicks = 200)
 	public static void wildNoelleFightsBack(GameTestHelper helper) {
 		NoelleEntity noelle = helper.spawn(ModEntities.NOELLE.get(), new BlockPos(1, 2, 1));
 		Zombie zombie = helper.spawn(EntityType.ZOMBIE, new BlockPos(3, 2, 3));

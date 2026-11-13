@@ -2,7 +2,6 @@ package com.freshorangeslices.enshining.registry;
 
 import com.freshorangeslices.enshining.Enshining;
 import com.freshorangeslices.enshining.character.noelle.NoelleEntity;
-import com.freshorangeslices.enshining.character.noelle.NoelleFullComboEntity;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.MobCategory;
 import net.minecraft.world.entity.SpawnPlacements;
@@ -20,17 +19,12 @@ public final class ModEntities {
 
 	public static final RegistryObject<EntityType<NoelleEntity>> NOELLE = ENTITIES.register("noelle",
 			() -> EntityType.Builder.of(NoelleEntity::new, MobCategory.CREATURE).sized(0.6F, 1.8F).clientTrackingRange(10).build("noelle"));
-	/** Test variant: the combo as one whole animation (spawn egg only, never spawns in the world). */
-	public static final RegistryObject<EntityType<NoelleFullComboEntity>> NOELLE_FULL_COMBO = ENTITIES.register("noelle_full_combo",
-			() -> EntityType.Builder.of(NoelleFullComboEntity::new, MobCategory.CREATURE).sized(0.6F, 1.8F).clientTrackingRange(10)
-					.build("noelle_full_combo"));
 
 	private ModEntities() {
 	}
 
 	public static void attributes(EntityAttributeCreationEvent event) {
 		event.put(NOELLE.get(), NoelleEntity.createAttributes().build());
-		event.put(NOELLE_FULL_COMBO.get(), NoelleEntity.createAttributes().build());
 	}
 
 	public static void spawnPlacements(SpawnPlacementRegisterEvent event) {
