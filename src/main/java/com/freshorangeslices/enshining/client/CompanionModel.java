@@ -22,12 +22,11 @@ public class CompanionModel<T extends CompanionEntity> extends DefaultedEntityGe
 		super(new ResourceLocation(Enshining.MODID, name), true);
 	}
 
-	@Override
-	/** Bones each animation keys rotation on (cached per animation). */
+	/** Bones each animation keys (cached per animation). */
 	private final Map<Animation, Set<String>> rotatedBones = new IdentityHashMap<>();
 
 	/**
-	 * The bones the playing animation rotates. GeckoLib clears its own "this bone was animated" flags before this
+	 * The bones the playing animation moves. GeckoLib clears its own "this bone was animated" flags before this
 	 * model code runs, so they can't be used; this reads the animation itself instead.
 	 */
 	private Set<String> animatedBones(AnimationState<T> state) {
@@ -38,10 +37,7 @@ public class CompanionModel<T extends CompanionEntity> extends DefaultedEntityGe
 		return rotatedBones.computeIfAbsent(current.animation(), animation -> {
 			Set<String> names = new HashSet<>();
 			for (BoneAnimation bone : animation.boneAnimations()) {
-				var rotation = bone.rotationKeyFrames();
-				if (!rotation.xKeyframes().isEmpty() || !rotation.yKeyframes().isEmpty() || !rotation.zKeyframes().isEmpty()) {
-					names.add(bone.boneName());
-				}
+				names.add(bone.boneName());
 			}
 			return names;
 		});
