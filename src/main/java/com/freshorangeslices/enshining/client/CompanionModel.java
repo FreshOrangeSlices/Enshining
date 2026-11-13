@@ -1,5 +1,6 @@
 package com.freshorangeslices.enshining.client;
 
+import net.minecraft.util.Mth;
 import com.freshorangeslices.enshining.Enshining;
 import com.freshorangeslices.enshining.core.CompanionEntity;
 import net.minecraft.resources.ResourceLocation;
@@ -16,25 +17,28 @@ public class CompanionModel<T extends CompanionEntity> extends DefaultedEntityGe
 	@Override
 	public void setCustomAnimations(T companion, long instanceId, AnimationState<T> state) {
 		// GeckoLib's head turn REPLACES the head's rotation with the look direction, which would wipe out head keys
-		// from Blockbench. Remember what the animation did to the head, let the look turn happen, then put it back:
-		// in a fight (and for 3s after) the head follows the animation only (no look-at); otherwise the animated
-		// head turn is added on top of the look direction.
+		// from Blockbench. By this point GeckoLib has already written this frame's animation into the head (keyed, or
+		// easing back to rest), so read it, let the look turn happen, then put the animation back: in a fight (and
+		// for 3s after) the head follows the animation only; otherwise the look is added on top, limited so the
+		// two together never twist her neck past what a person could.
 		CoreGeoBone head = getAnimationProcessor().getBone("head");
 		float animX = 0, animY = 0;
-		// Only when this frame's animation actually keyed the head: otherwise the head still holds last frame's
-		// look turn, and adding it again every frame would spin her head round.
-		if (head != null && head.hasRotationChanged()) {
+		if (head != null) {
 			animX = head.getRotX() - head.getInitialSnapshot().getRotX();
 			animY = head.getRotY() - head.getInitialSnapshot().getRotY();
 		}
 		super.setCustomAnimations(companion, instanceId, state);
 		if (head != null) {
+			float baseX = head.getInitialSnapshot().getRotX();
+			float baseY = head.getInitialSnapshot().getRotY();
 			if (companion.playingMove() || companion.inCombat()) {
-				head.setRotX(head.getInitialSnapshot().getRotX() + animX);
-				head.setRotY(head.getInitialSnapshot().getRotY() + animY);
+				head.setRotX(baseX + animX);
+				head.setRotY(baseY + animY);
 			} else {
-				head.setRotX(head.getRotX() + animX);
-				head.setRotY(head.getRotY() + animY);
+				float lookX = head.getRotX() - baseX;
+				float lookY = head.getRotY() - baseY;
+				head.setRotX(baseX + Mth.clamp(lookX + animX, -0.7F, 0.7F));
+				head.setRotY(baseY + Mth.clamp(lookY + animY, -1.3F, 1.3F));
 			}
 		}
 		CoreGeoBone weapon = getAnimationProcessor().getBone("weapon");

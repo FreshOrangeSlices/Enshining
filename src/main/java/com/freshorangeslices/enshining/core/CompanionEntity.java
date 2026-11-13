@@ -20,6 +20,7 @@ import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.TamableAnimal;
+import net.minecraft.util.Mth;
 import net.minecraft.world.entity.ai.attributes.AttributeInstance;
 import net.minecraft.world.entity.ai.attributes.AttributeModifier;
 import net.minecraft.world.entity.ai.attributes.Attributes;
@@ -103,6 +104,7 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 	@Nullable
 	private LivingEntity comboTarget;
 	private int comboSeen = -1;   // client side: the last hit this client started playing
+	private float comboYaw;       // the way she faces for the whole of a hit (turning mid-swing spins the animation)
 
 	protected CompanionEntity(EntityType<? extends TamableAnimal> type, Level level) {
 		super(type, level);
@@ -167,7 +169,7 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 
 	/** Her movement speed (attribute value) while a combo is going: between hits she only edges forward. */
 	protected double comboMoveSpeed() {
-		return 0.1;
+		return 0.2;
 	}
 
 	/** How much faster than animated the combo plays in-game. */
@@ -261,7 +263,29 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 		comboEndTicks = 0;
 		comboTarget = target;
 		combatTicks = 60;
+		double dx = target.getX() - getX();
+		double dz = target.getZ() - getZ();
+		comboYaw = (float) (Mth.atan2(dz, dx) * Mth.RAD_TO_DEG) - 90.0F;
+		lockFacing();
 		entityData.set(COMBO, comboCount << 3 | (index + 1));
+	}
+
+	private void lockFacing() {
+		setYRot(comboYaw);
+		yRotO = comboYaw;
+		setYBodyRot(comboYaw);
+		yBodyRotO = comboYaw;
+		setYHeadRot(comboYaw);
+		yHeadRotO = comboYaw;
+	}
+
+	@Override
+	public void tick() {
+		super.tick();
+		// Locked facing for the whole of a hit: the AI's look/turn this tick is undone before it's sent to players.
+		if (!level().isClientSide && comboPieceTicks > 0) {
+			lockFacing();
+		}
 	}
 
 	private void resetCombo() {
@@ -524,9 +548,6 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 			// Planted while a hit plays: no sliding along in the middle of a swing, just turn to face the target.
 			getNavigation().stop();
 			getMoveControl().setWantedPosition(getX(), getY(), getZ(), 0.0);
-			if (comboTarget != null) {
-				getLookControl().setLookAt(comboTarget, 30.0F, 30.0F);
-			}
 		}
 		if (actionTicks > 0 && --actionTicks == 0) {
 			entityData.set(ACTION, ACTION_NONE);
