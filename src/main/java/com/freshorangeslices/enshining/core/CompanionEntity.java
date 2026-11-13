@@ -502,6 +502,14 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 		}
 		tickAbilities();
 		tickCombo();
+		if (comboPieceTicks > 0) {
+			// Planted while a hit plays: no sliding along in the middle of a swing, just turn to face the target.
+			getNavigation().stop();
+			getMoveControl().setWantedPosition(getX(), getY(), getZ(), 0.0);
+			if (comboTarget != null) {
+				getLookControl().setLookAt(comboTarget, 30.0F, 30.0F);
+			}
+		}
 		if (actionTicks > 0 && --actionTicks == 0) {
 			entityData.set(ACTION, ACTION_NONE);
 		}
@@ -660,6 +668,7 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 				}
 			}
 			state.getController().setAnimationSpeed(1.0);
+			state.getController().setTransitionLength(6); // walk/run/idle ease into each other
 			boolean newSwing = swinging && !wasSwinging;
 			wasSwinging = swinging;
 			if (newSwing) {
@@ -707,6 +716,7 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 		if (count != comboSeen) {
 			comboSeen = count;
 			controller.setAnimationSpeed(comboSpeed());
+			controller.setTransitionLength(2); // hits snap in
 			controller.forceAnimationReset();
 			return state.setAndContinue(animation);
 		}

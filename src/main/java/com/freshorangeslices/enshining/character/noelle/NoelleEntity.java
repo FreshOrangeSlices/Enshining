@@ -65,7 +65,7 @@ public class NoelleEntity extends CompanionEntity {
 	public static AttributeSupplier.Builder createAttributes() {
 		return Mob.createMobAttributes()
 				.add(Attributes.MAX_HEALTH, 30.0)
-				.add(Attributes.MOVEMENT_SPEED, 0.3)
+				.add(Attributes.MOVEMENT_SPEED, 0.25)
 				.add(Attributes.ATTACK_DAMAGE, 6.0)
 				.add(Attributes.ARMOR, 8.0)
 				.add(Attributes.FOLLOW_RANGE, 24.0)
@@ -289,12 +289,6 @@ public class NoelleEntity extends CompanionEntity {
 	@Override
 	protected double comboEndLength() {
 		return 2.0833;
-	}
-
-	/** The animation is timed to a slowed-down reference; in-game she swings at Genshin speed. */
-	@Override
-	protected double comboSpeed() {
-		return 1.4;
 	}
 
 	@Override

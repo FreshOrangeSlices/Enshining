@@ -17,7 +17,7 @@ public class CompanionModel<T extends CompanionEntity> extends DefaultedEntityGe
 	public void setCustomAnimations(T companion, long instanceId, AnimationState<T> state) {
 		// GeckoLib's head turn REPLACES the head's rotation with the look direction, which would wipe out head keys
 		// from Blockbench. Remember what the animation did to the head, let the look turn happen, then put it back:
-		// during an attack, skill or burst the head follows the animation only (no look-at); otherwise the animated
+		// in a fight (and for 3s after) the head follows the animation only (no look-at); otherwise the animated
 		// head turn is added on top of the look direction.
 		CoreGeoBone head = getAnimationProcessor().getBone("head");
 		float animX = 0, animY = 0;
@@ -29,7 +29,7 @@ public class CompanionModel<T extends CompanionEntity> extends DefaultedEntityGe
 		}
 		super.setCustomAnimations(companion, instanceId, state);
 		if (head != null) {
-			if (companion.playingMove()) {
+			if (companion.playingMove() || companion.inCombat()) {
 				head.setRotX(head.getInitialSnapshot().getRotX() + animX);
 				head.setRotY(head.getInitialSnapshot().getRotY() + animY);
 			} else {
