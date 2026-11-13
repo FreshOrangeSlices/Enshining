@@ -7,5 +7,17 @@
   "enshining.companion.befriended": "%s is now your companion!",
   "enshining.companion.mode": "%s: %s",
   "enshining.companion.status": "%s - Lv %s (%s/%s XP), energy %s, %s",
-  "enshining.companion.level_up": "%s reached level %s!"
+  "enshining.companion.level_up": "%s reached level %s!",
+  "enshining.menu.mode": "Mode: %s",
+  "enshining.behavior.aggressive": "Aggressive",
+  "enshining.behavior.wait_for_leader": "Wait for leader",
+  "enshining.behavior.passive": "Passive",
+  "enshining.menu.armor": "Armor: %s",
+  "enshining.menu.weapon": "Weapon: %s",
+  "enshining.menu.skill": "Skill: %s",
+  "enshining.menu.burst": "Burst: %s",
+  "enshining.menu.on": "On",
+  "enshining.menu.off": "Off",
+  "enshining.menu.status": "Lv %s  XP %s/%s",
+  "enshining.menu.status2": "HP %s/%s  Energy %s/%s"
 }

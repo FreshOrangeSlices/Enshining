@@ -2,7 +2,9 @@ package com.freshorangeslices.enshining.gametest;
 
 import com.freshorangeslices.enshining.Enshining;
 import com.freshorangeslices.enshining.character.noelle.NoelleEntity;
+import com.freshorangeslices.enshining.core.CompanionBehavior;
 import com.freshorangeslices.enshining.core.CompanionEntity;
+import com.freshorangeslices.enshining.core.CompanionMenu;
 import com.freshorangeslices.enshining.core.CompanionMode;
 import com.freshorangeslices.enshining.registry.ModEntities;
 import com.mojang.authlib.GameProfile;
@@ -13,6 +15,7 @@ import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.entity.monster.Zombie;
 import net.minecraft.world.item.ItemStack;
@@ -66,19 +69,40 @@ public final class CompanionGameTests {
 	}
 
 	@GameTest(template = "empty")
-	public static void emptyHandCyclesModes(GameTestHelper helper) {
+	public static void menuButtonsChangeHerSettings(GameTestHelper helper) {
 		NoelleEntity noelle = noelle(helper);
 		ServerPlayer player = player(helper);
 		noelle.befriend(player);
-		player.setItemInHand(InteractionHand.MAIN_HAND, ItemStack.EMPTY);
+		CompanionMenu menu = new CompanionMenu(0, player.getInventory(), noelle);
 
-		noelle.mobInteract(player, InteractionHand.MAIN_HAND);
+		menu.clickMenuButton(player, CompanionMenu.BUTTON_MODE);
 		helper.assertTrue(noelle.mode() == CompanionMode.WANDER, "Follow -> Wander");
-		noelle.mobInteract(player, InteractionHand.MAIN_HAND);
+		menu.clickMenuButton(player, CompanionMenu.BUTTON_MODE);
 		helper.assertTrue(noelle.mode() == CompanionMode.STAY && noelle.isOrderedToSit(), "Wander -> Stay (sits)");
-		noelle.mobInteract(player, InteractionHand.MAIN_HAND);
+		menu.clickMenuButton(player, CompanionMenu.BUTTON_MODE);
 		helper.assertTrue(noelle.mode() == CompanionMode.FOLLOW && !noelle.isOrderedToSit(), "Stay -> Follow");
+
+		menu.clickMenuButton(player, CompanionMenu.BUTTON_BEHAVIOR);
+		helper.assertTrue(noelle.behavior() == CompanionBehavior.WAIT_FOR_LEADER, "Aggressive -> Wait for leader");
+		menu.clickMenuButton(player, CompanionMenu.BUTTON_BEHAVIOR);
+		helper.assertTrue(noelle.behavior() == CompanionBehavior.PASSIVE, "-> Passive");
+
+		helper.assertTrue(noelle.setting(CompanionEntity.SKILL_ON), "Skill starts on");
+		menu.clickMenuButton(player, CompanionMenu.BUTTON_SKILL);
+		helper.assertFalse(noelle.setting(CompanionEntity.SKILL_ON), "Skill off");
+		menu.clickMenuButton(player, CompanionMenu.BUTTON_WEAPON);
+		helper.assertFalse(noelle.setting(CompanionEntity.SHOW_WEAPON), "Weapon hidden");
 		helper.succeed();
+	}
+
+	@GameTest(template = "empty")
+	public static void heldWeaponReplacesHerClaymore(GameTestHelper helper) {
+		NoelleEntity noelle = noelle(helper);
+		noelle.befriend(player(helper));
+		helper.assertTrue(noelle.getAttributeValue(Attributes.ATTACK_DAMAGE) == 3.5, "Claymore: 3.5");
+		noelle.setItemSlot(EquipmentSlot.MAINHAND, new ItemStack(Items.IRON_SWORD));
+		helper.succeedWhen(() -> helper.assertTrue(noelle.getAttributeValue(Attributes.ATTACK_DAMAGE) == 6.0,
+				"An iron sword hits like a player's (6), not on top of her claymore: " + noelle.getAttributeValue(Attributes.ATTACK_DAMAGE)));
 	}
 
 	@GameTest(template = "empty")
@@ -99,7 +123,7 @@ public final class CompanionGameTests {
 		noelle.addXp(CompanionEntity.xpToNext(1) + CompanionEntity.xpToNext(2));
 		helper.assertTrue(noelle.companionLevel() == 3, "Level 3: " + noelle.companionLevel());
 		helper.assertTrue(noelle.getMaxHealth() == 34.0F, "34 health at level 3: " + noelle.getMaxHealth());
-		helper.assertTrue(noelle.getAttributeValue(Attributes.ATTACK_DAMAGE) == attack + 1.0, "+1 attack");
+		helper.assertTrue(noelle.getAttributeValue(Attributes.ATTACK_DAMAGE) == attack + 0.5, "+0.25 attack a level");
 		helper.succeed();
 	}
 

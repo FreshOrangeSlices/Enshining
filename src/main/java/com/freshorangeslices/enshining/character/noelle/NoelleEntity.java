@@ -66,7 +66,7 @@ public class NoelleEntity extends CompanionEntity {
 		return Mob.createMobAttributes()
 				.add(Attributes.MAX_HEALTH, 30.0)
 				.add(Attributes.MOVEMENT_SPEED, 0.25)
-				.add(Attributes.ATTACK_DAMAGE, 6.0)
+				.add(Attributes.ATTACK_DAMAGE, 3.5)
 				.add(Attributes.ARMOR, 8.0)
 				.add(Attributes.FOLLOW_RANGE, 24.0)
 				.add(Attributes.KNOCKBACK_RESISTANCE, 0.4);
@@ -198,6 +198,12 @@ public class NoelleEntity extends CompanionEntity {
 	@Override
 	public double meleeReachScale() {
 		return burstActive() ? 2.0 : 1.0;
+	}
+
+	/** The magic blade overlay shows during Sweeping Time, whatever weapon she holds. */
+	@Override
+	public boolean weaponAuraActive() {
+		return sweeping() && inCombat();
 	}
 
 	/** Claymore swings hit everything in a wide arc in front of her; Sweeping Time has its own, bigger sweep. */

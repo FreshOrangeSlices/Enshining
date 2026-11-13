@@ -20,6 +20,9 @@ import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.TamableAnimal;
+import net.minecraftforge.network.NetworkHooks;
+import net.minecraft.world.SimpleMenuProvider;
+import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.phys.Vec3;
 import net.minecraft.world.entity.monster.Enemy;
 import net.minecraft.world.entity.Mob;
@@ -69,6 +72,12 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 	private static final EntityDataAccessor<Integer> ACTION = SynchedEntityData.defineId(CompanionEntity.class, EntityDataSerializers.INT);
 	/** In a fight (a target, or hit or hitting in the last 3 seconds): synced, so the weapon only shows then, like in Genshin. */
 	private static final EntityDataAccessor<Boolean> COMBAT = SynchedEntityData.defineId(CompanionEntity.class, EntityDataSerializers.BOOLEAN);
+	/** Menu settings, as bits (see SHOW_ARMOR...), and her behavior. */
+	private static final EntityDataAccessor<Integer> SETTINGS = SynchedEntityData.defineId(CompanionEntity.class, EntityDataSerializers.INT);
+	private static final EntityDataAccessor<Integer> BEHAVIOR = SynchedEntityData.defineId(CompanionEntity.class, EntityDataSerializers.INT);
+	public static final int SHOW_ARMOR = 1, SHOW_WEAPON = 2, SKILL_ON = 4, BURST_ON = 8;
+	private static final int DEFAULT_SETTINGS = SHOW_ARMOR | SHOW_WEAPON | SKILL_ON | BURST_ON;
+	private static final UUID WEAPON_SWAP = UUID.fromString("5e3b1c2a-7d41-4c55-9a0e-0e1a1f000004");
 	/** The combo, packed: (count of hits started << 3) | phase. Phase 0 = none, 1..n = combo hit n, 7 = the ending. */
 	private static final EntityDataAccessor<Integer> COMBO = SynchedEntityData.defineId(CompanionEntity.class, EntityDataSerializers.INT);
 	private static final int COMBO_END_PHASE = 7;
@@ -217,6 +226,56 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 		entityData.define(ACTION, ACTION_NONE);
 		entityData.define(COMBAT, false);
 		entityData.define(COMBO, 0);
+		entityData.define(SETTINGS, DEFAULT_SETTINGS);
+		entityData.define(BEHAVIOR, CompanionBehavior.AGGRESSIVE.ordinal());
+	}
+
+	// ---- Menu settings ----------------------------------------------------------------------------------------
+
+	public boolean setting(int bit) {
+		return (entityData.get(SETTINGS) & bit) != 0;
+	}
+
+	public void toggleSetting(int bit) {
+		entityData.set(SETTINGS, entityData.get(SETTINGS) ^ bit);
+	}
+
+	public CompanionBehavior behavior() {
+		return CompanionBehavior.values()[Math.floorMod(entityData.get(BEHAVIOR), CompanionBehavior.values().length)];
+	}
+
+	public void setBehavior(CompanionBehavior behavior) {
+		entityData.set(BEHAVIOR, behavior.ordinal());
+		if (behavior == CompanionBehavior.PASSIVE) {
+			setTarget(null);
+			resetCombo();
+		}
+	}
+
+	/** Whether the magic weapon overlay ("weapon_aura" bone) is showing; a character's burst can turn it on. */
+	public boolean weaponAuraActive() {
+		return false;
+	}
+
+	/** Holding a weapon (menu weapon slot): it replaces her own weapon's damage (her level bonus still counts). */
+	public boolean holdsSwappedWeapon() {
+		return CompanionMenu.isWeapon(getMainHandItem());
+	}
+
+	private void updateWeaponSwap() {
+		var attack = getAttribute(Attributes.ATTACK_DAMAGE);
+		if (attack == null) {
+			return;
+		}
+		boolean swapped = holdsSwappedWeapon();
+		if (swapped != (attack.getModifier(WEAPON_SWAP) != null)) {
+			attack.removeModifier(WEAPON_SWAP);
+			if (swapped) {
+				// The held weapon adds its own damage (as for a player: 1 + the weapon); her claymore's base is set aside.
+				attack.addTransientModifier(new AttributeModifier(WEAPON_SWAP, "Swapped weapon", 1.0 - attack.getBaseValue(),
+						AttributeModifier.Operation.ADDITION));
+			}
+		}
 	}
 
 	public CompanionMode mode() {
@@ -353,6 +412,9 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 	@Override
 	public void tick() {
 		super.tick();
+		if (!level().isClientSide) {
+			updateWeaponSwap();
+		}
 		if (level().isClientSide) {
 			lookBlendO = lookBlend;
 			float want = playingMove || inCombat() ? 0.0F : 1.0F;
@@ -479,7 +541,7 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 				return candidate;
 			}
 		}
-		if (!isTame()) {
+		if (!isTame() || behavior() != CompanionBehavior.AGGRESSIVE) {
 			return null;
 		}
 		double reach = meleeReach() * meleeReachScale() + 1.0 + give;
@@ -499,6 +561,14 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 
 	public int energy() {
 		return energy;
+	}
+
+	public int xp() {
+		return xp;
+	}
+
+	public int burstEnergyCost() {
+		return burstCost();
 	}
 
 	public int skillCooldown() {
@@ -541,7 +611,7 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 	private void applyLevelStats() {
 		int bonusLevels = companionLevel() - 1;
 		setModifier(Attributes.MAX_HEALTH, LEVEL_HEALTH, "Companion level health", bonusLevels * 2.0);
-		setModifier(Attributes.ATTACK_DAMAGE, LEVEL_ATTACK, "Companion level attack", bonusLevels * 0.5);
+		setModifier(Attributes.ATTACK_DAMAGE, LEVEL_ATTACK, "Companion level attack", bonusLevels * 0.25);
 	}
 
 	protected void setModifier(net.minecraft.world.entity.ai.attributes.Attribute attribute, UUID id, String name, double amount) {
@@ -563,6 +633,8 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 		tag.putInt("CompanionXp", xp);
 		tag.putInt("SkillCooldown", skillCooldown);
 		tag.putInt("Energy", energy);
+		tag.putInt("MenuSettings", entityData.get(SETTINGS));
+		tag.putString("Behavior", behavior().name());
 	}
 
 	@Override
@@ -577,6 +649,14 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 		xp = tag.getInt("CompanionXp");
 		skillCooldown = tag.getInt("SkillCooldown");
 		energy = tag.getInt("Energy");
+		if (tag.contains("MenuSettings")) {
+			entityData.set(SETTINGS, tag.getInt("MenuSettings"));
+		}
+		try {
+			entityData.set(BEHAVIOR, CompanionBehavior.valueOf(tag.getString("Behavior")).ordinal());
+		} catch (IllegalArgumentException ignored) {
+			entityData.set(BEHAVIOR, CompanionBehavior.AGGRESSIVE.ordinal());
+		}
 	}
 
 	// ---- Behaviour --------------------------------------------------------------------------------------------
@@ -647,11 +727,27 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 		goalSelector.addGoal(8, new LookAtPlayerGoal(this, Player.class, 8.0F));
 		goalSelector.addGoal(9, new RandomLookAroundGoal(this));
 
-		targetSelector.addGoal(1, new OwnerHurtByTargetGoal(this));
-		targetSelector.addGoal(2, new OwnerHurtTargetGoal(this));
-		targetSelector.addGoal(3, new HurtByTargetGoal(this));
+		// Passive: none of these. Wait for leader: only the first three (what you fight, or what hits you or her).
+		targetSelector.addGoal(1, new OwnerHurtByTargetGoal(this) {
+			@Override
+			public boolean canUse() {
+				return behavior() != CompanionBehavior.PASSIVE && super.canUse();
+			}
+		});
+		targetSelector.addGoal(2, new OwnerHurtTargetGoal(this) {
+			@Override
+			public boolean canUse() {
+				return behavior() != CompanionBehavior.PASSIVE && super.canUse();
+			}
+		});
+		targetSelector.addGoal(3, new HurtByTargetGoal(this) {
+			@Override
+			public boolean canUse() {
+				return behavior() != CompanionBehavior.PASSIVE && super.canUse();
+			}
+		});
 		targetSelector.addGoal(4, new NearestAttackableTargetGoal<>(this, Monster.class, 10, true, false,
-				mob -> isTame() && !isOrderedToSit() && !(mob instanceof Creeper)));
+				mob -> isTame() && !isOrderedToSit() && behavior() == CompanionBehavior.AGGRESSIVE && !(mob instanceof Creeper)));
 	}
 
 	@Override
@@ -728,11 +824,11 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 		if (target == null || !target.isAlive() || distanceToSqr(target) > 36 || comboPieceTicks > 0) {
 			return;
 		}
-		if (energy >= burstCost()) {
+		if (setting(BURST_ON) && energy >= burstCost()) {
 			energy = 0;
 			playAction(ACTION_BURST, burstAnimationTicks());
 			useBurst(target);
-		} else if (skillCooldown <= 0) {
+		} else if (setting(SKILL_ON) && skillCooldown <= 0) {
 			skillCooldown = skillCooldownTicks();
 			energy = Math.min(MAX_ENERGY, energy + 6);
 			playAction(ACTION_SKILL, skillAnimationTicks());
@@ -777,19 +873,19 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 			return InteractionResult.SUCCESS;
 		}
 
-		if (stack.isEmpty() && hand == InteractionHand.MAIN_HAND) {
-			if (player.isShiftKeyDown()) {
-				player.displayClientMessage(Component.translatable("enshining.companion.status", getDisplayName(), companionLevel(),
-						xp, xpToNext(companionLevel()), energy, Component.translatable("enshining.mode." + mode().name().toLowerCase())), true);
-			} else {
-				setMode(mode().next());
-				player.displayClientMessage(Component.translatable("enshining.companion.mode", getDisplayName(),
-						Component.translatable("enshining.mode." + mode().name().toLowerCase())), true);
-			}
+		if (hand == InteractionHand.MAIN_HAND && player instanceof ServerPlayer serverPlayer
+				&& !(player instanceof net.minecraftforge.common.util.FakePlayer)) {
+			openMenu(serverPlayer);
 			return InteractionResult.SUCCESS;
 		}
 
 		return InteractionResult.PASS;
+	}
+
+	/** Opens her menu (equipment, settings, status) for her owner. */
+	public void openMenu(ServerPlayer player) {
+		NetworkHooks.openScreen(player, new SimpleMenuProvider((id, inventory, p) -> new CompanionMenu(id, inventory, this), getDisplayName()),
+				buf -> buf.writeVarInt(getId()));
 	}
 
 	/** The goals running now, for tests and debugging. */
