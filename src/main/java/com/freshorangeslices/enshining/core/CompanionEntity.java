@@ -77,7 +77,6 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 
 	private static final UUID LEVEL_HEALTH = UUID.fromString("5e3b1c2a-7d41-4c55-9a0e-0e1a1f000001");
 	private static final UUID LEVEL_ATTACK = UUID.fromString("5e3b1c2a-7d41-4c55-9a0e-0e1a1f000002");
-	private static final UUID COMBO_SLOW = UUID.fromString("5e3b1c2a-7d41-4c55-9a0e-0e1a1f000003");
 
 	protected static final RawAnimation IDLE = RawAnimation.begin().thenLoop("animation.companion.idle");
 	protected static final RawAnimation WALK = RawAnimation.begin().thenLoop("animation.companion.walk");
@@ -110,6 +109,9 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 	private LivingEntity comboTarget;
 	private int comboSeen = -1;   // client side: the last hit this client started playing
 	private boolean comboShowing; // client side: a combo animation was showing last frame
+	private double comboTravelled; // blocks moved since the combo started
+	@Nullable
+	private net.minecraft.world.phys.Vec3 comboLastPos;
 	private float comboYaw;
 	private float comboAimYaw;       // the way she faces for the whole of a hit (turning mid-swing spins the animation)
 
@@ -184,9 +186,9 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 		return 0;
 	}
 
-	/** Her movement speed (attribute value) while a combo is going: between hits she only edges forward. */
-	protected double comboMoveSpeed() {
-		return 0.2;
+	/** How far (blocks) she may move in total over one whole combo. */
+	protected double comboTravel() {
+		return 2.0;
 	}
 
 	/** How much faster than animated the combo plays in-game. */
@@ -611,16 +613,20 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 		tickAbilities();
 		tickCombo();
 		boolean comboActive = comboPieceTicks > 0 || comboWindowTicks > 0 || comboEndTicks > 0;
-		var speed = getAttribute(Attributes.MOVEMENT_SPEED);
-		if (speed != null) {
-			boolean slowed = speed.getModifier(COMBO_SLOW) != null;
-			if (comboActive && !slowed) {
-				double base = speed.getValue();
-				speed.addTransientModifier(new AttributeModifier(COMBO_SLOW, "Combo footwork", comboMoveSpeed() / base - 1.0,
-						AttributeModifier.Operation.MULTIPLY_TOTAL));
-			} else if (!comboActive && slowed) {
-				speed.removeModifier(COMBO_SLOW);
+		// Footwork budget: over a whole combo she covers at most comboTravel() blocks (at her normal pace between hits),
+		// then holds her ground until the combo ends and resets.
+		if (comboActive) {
+			if (comboLastPos != null) {
+				comboTravelled += Math.sqrt(Math.pow(getX() - comboLastPos.x, 2) + Math.pow(getZ() - comboLastPos.z, 2));
 			}
+			comboLastPos = position();
+		} else {
+			comboTravelled = 0;
+			comboLastPos = null;
+		}
+		if (comboActive && comboTravelled >= comboTravel()) {
+			getNavigation().stop();
+			getMoveControl().setWantedPosition(getX(), getY(), getZ(), 0.0);
 		}
 		if (comboPieceTicks > 0) {
 			// Planted while a hit plays: no sliding along in the middle of a swing, just turn to face the target.
