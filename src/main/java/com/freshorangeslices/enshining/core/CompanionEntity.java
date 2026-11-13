@@ -563,10 +563,6 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 		return energy;
 	}
 
-	public int xp() {
-		return xp;
-	}
-
 	public int burstEnergyCost() {
 		return burstCost();
 	}
