@@ -370,6 +370,7 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 				LivingEntity target = comboFoe(0.5); // a little give
 				if (target != null) {
 					doHurtTarget(target);
+					cleave(target);
 				}
 			}
 		}
@@ -409,6 +410,28 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 			if (next != null && next != comboTarget) {
 				setTarget(next);
 				startComboHit(next);
+			}
+		}
+	}
+
+	/** The width (degrees) of a combo swing's arc in front of her; 0 = the swing only hits its one target. */
+	protected double cleaveArc() {
+		return 0;
+	}
+
+	/** A swing also catches every other hostile in reach inside its arc (full damage, a little knockback). */
+	private void cleave(LivingEntity primary) {
+		double arc = cleaveArc();
+		if (arc <= 0) {
+			return;
+		}
+		float damage = (float) getAttributeValue(Attributes.ATTACK_DAMAGE);
+		double reach = meleeReach() * meleeReachScale() + 1.0;
+		for (Mob mob : level().getEntitiesOfClass(Mob.class, getBoundingBox().inflate(reach), mob -> mob != primary && mob.isAlive()
+				&& mob instanceof Enemy && !(mob instanceof TamableAnimal tame && tame.isTame()) && inMeleeReach(mob, 0.5))) {
+			double angle = Mth.atan2(mob.getZ() - getZ(), mob.getX() - getX()) * Mth.RAD_TO_DEG - 90.0;
+			if (Math.abs(Mth.wrapDegrees(angle - yBodyRot)) <= arc / 2 && mob.hurt(damageSources().mobAttack(this), damage)) {
+				mob.knockback(0.3, Mth.sin(yBodyRot * Mth.DEG_TO_RAD), -Mth.cos(yBodyRot * Mth.DEG_TO_RAD));
 			}
 		}
 	}

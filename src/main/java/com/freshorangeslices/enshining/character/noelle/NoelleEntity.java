@@ -200,6 +200,12 @@ public class NoelleEntity extends CompanionEntity {
 		return burstActive() ? 2.0 : 1.0;
 	}
 
+	/** Claymore swings hit everything in a wide arc in front of her; Sweeping Time has its own, bigger sweep. */
+	@Override
+	protected double cleaveArc() {
+		return burstActive() ? 0 : 150;
+	}
+
 	@Override
 	protected void onHit(LivingEntity target) {
 		ServerLevel server = level() instanceof ServerLevel s ? s : null;
@@ -207,6 +213,10 @@ public class NoelleEntity extends CompanionEntity {
 		sound(SoundEvents.PLAYER_ATTACK_STRONG, 0.8F, 0.75F);
 		if (server != null) {
 			server.sendParticles(ParticleTypes.CRIT, target.getX(), target.getY(0.6), target.getZ(), 8, 0.3, 0.3, 0.3, 0.2);
+			if (!burstActive()) {
+				// A small, faint gold arc for a normal swing (Sweeping Time draws a much bigger one).
+				Fx.arc(server, element().dust(), position().add(0, 1.0, 0), yBodyRot, 2.3, 150, 18, 0.4);
+			}
 		}
 
 		if (shieldActive() && random.nextBoolean()) {
