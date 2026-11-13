@@ -1,81 +1,117 @@
-"""A plain, generic two-layer skirt rig on the girl base rig: flat flared panels (inner layer, outer layer), with the
-front panels in skirt_front and the back panels in skirt_back (so they follow the legs in code), sides in
-skirt_inner / skirt_outer. Placeholder neutral textures in clearly separated regions of ONE texture."""
-import base64, io, json, sys, uuid
+"""A plain, generic two-layer skirt rig on the girl base rig, built the "ring of narrow fanned panels" way: each
+layer is a ring of narrow flat planes around the hips, each turned to face outward and tilted out at the hem, slightly
+overlapping, so together they read as a smooth bell that's narrow at the waist and wide at the hem. The inner layer is
+shorter and offset by half a panel so it fills the outer layer's hem gaps. Front panels (both layers) are in
+skirt_front, back panels in skirt_back (they follow the legs in code), the rest in skirt_inner / skirt_outer.
+Placeholder neutral textures, one strip per group per layer (outside and a darker inside), in ONE texture."""
+import base64, io, json, math, sys, uuid
 from PIL import Image, ImageDraw
 
 base = json.load(open(sys.argv[1]))
 out_path = sys.argv[2]
 uid = lambda: str(uuid.uuid4())
 
-# --- texture: keep the base rig's 64x64 on top, add a 64x64 skirt area below (64x128 total) -------------------------
+LAYERS = {
+    # name: panels, hip radii (x, z), top y, length, hem flare (deg), width overlap, angle offset (fraction of a step)
+    'inner': dict(n=12, rx=4.6, rz=2.8, top=13.0, length=6.0, flare=14, overlap=1.25, offset=0.5, short=0.0),
+    'outer': dict(n=14, rx=5.1, rz=3.3, top=13.5, length=8.5, flare=24, overlap=1.3, offset=0.0, short=0.7),
+}
+FRONT_DEG, BACK_DEG = 40, 40  # panels within this many degrees of straight front / back go in skirt_front / skirt_back
+
+def part_of(phi):
+    d = (phi + 180) % 360 - 180
+    if abs(d) <= FRONT_DEG:
+        return 'front'
+    if abs(abs(d) - 180) <= BACK_DEG:
+        return 'back'
+    return 'rest'
+
+# panel list with widths first, to size the texture strips
+panels = []
+for layer, p in LAYERS.items():
+    perim = 2 * math.pi * math.sqrt((p['rx'] ** 2 + p['rz'] ** 2) / 2)
+    width = perim / p['n'] * p['overlap']
+    for i in range(p['n']):
+        phi = (i + p['offset']) * 360.0 / p['n']
+        length = p['length'] - (p['short'] if i % 2 else 0.0)  # staggered hem on the outer layer
+        panels.append(dict(layer=layer, i=i, phi=phi, width=round(width, 3), length=length, part=part_of(phi), **{k: p[k] for k in ('rx', 'rz', 'top', 'flare')}))
+
+# --- texture: the base rig's 64x64 on top, skirt strips below (64x128) --------------------------------------------
 src = Image.open(io.BytesIO(base64.b64decode(base['textures'][0]['source'].split(',', 1)[1]))).convert('RGBA')
 tex = Image.new('RGBA', (64, 128), (0, 0, 0, 0))
 tex.paste(src, (0, 0))
 draw = ImageDraw.Draw(tex)
-REGIONS = {}  # name -> (u, v, w, h)
-
-def region(name, u, v, w, h, color):
-    REGIONS[name] = (u, v, w, h)
-    draw.rectangle([u, v, u + w - 1, v + h - 1], fill=color)
-    # faint seam lines every 2 px so folds are easy to paint over
-    for x in range(u, u + w, 2):
-        draw.line([x, v, x, v + h - 1], fill=tuple(max(0, c - 12) for c in color[:3]) + (255,))
-
-# Inner layer (light), outer layer (mid), front panels (warm): outside faces, then darker inside faces.
-region('inner_side', 0, 64, 5, 6, (205, 205, 205, 255)); region('inner_side_in', 5, 64, 5, 6, (150, 150, 150, 255))
-region('inner_back', 10, 64, 9, 6, (205, 205, 205, 255)); region('inner_back_in', 19, 64, 9, 6, (150, 150, 150, 255))
-region('outer_side', 0, 72, 7, 8, (170, 170, 175, 255)); region('outer_side_in', 7, 72, 7, 8, (120, 120, 125, 255))
-region('outer_back', 14, 72, 11, 8, (170, 170, 175, 255)); region('outer_back_in', 25, 72, 11, 8, (120, 120, 125, 255))
-region('inner_front', 0, 84, 9, 6, (215, 200, 185, 255)); region('inner_front_in', 9, 84, 9, 6, (160, 148, 136, 255))
-region('outer_front', 18, 84, 11, 8, (200, 185, 170, 255)); region('outer_front_in', 29, 84, 11, 8, (148, 136, 124, 255))
+COLORS = {('inner', 'out'): (205, 205, 210), ('inner', 'in'): (150, 150, 155),
+          ('outer', 'out'): (170, 170, 178), ('outer', 'in'): (118, 118, 126)}
+strips, y = {}, 64
+for layer in ('inner', 'outer'):
+    h = math.ceil(max(pp['length'] for pp in panels if pp['layer'] == layer))
+    for side in ('out', 'in'):
+        x = 0
+        for part in ('rest', 'front', 'back'):
+            ps = [pp for pp in panels if pp['layer'] == layer and pp['part'] == part]
+            w = sum(pp['width'] for pp in ps)
+            strips[(layer, part, side)] = [x, y]
+            col = COLORS[(layer, side)]
+            if part == 'front':
+                col = tuple(min(255, c + 12) for c in col[:2]) + (col[2] - 10,)  # front a touch warmer
+            draw.rectangle([x, y, x + math.ceil(w) - 1, y + h - 1], fill=col + (255,))
+            u = x
+            for pp in ps:  # a faint line at each panel edge, so seams are easy to see while painting
+                draw.line([round(u), y, round(u), y + h - 1], fill=tuple(c - 25 for c in col[:3]) + (255,))
+                u += pp['width']
+            x += math.ceil(w) + 1
+        assert x <= 65, (layer, side, x)
+        y += h + 1
+assert y <= 128
 
 groups, elements = base['groups'], base['elements']
 
-def group(name, origin, children=()):
+def group(name, origin, children):
     g = {'name': name, 'uuid': uid(), 'export': True, 'locked': False, 'scope': 0, 'selected': False, 'visibility': True,
          'origin': origin, 'rotation': [0, 0, 0], 'color': 3, 'reset': False, 'shade': True, 'mirror_uv': False,
-         'autouv': 0, 'isOpen': True}
+         'autouv': 0, 'isOpen': False}
     groups.append(g)
-    return {'uuid': g['uuid'], 'isOpen': True, 'children': list(children)}
+    return {'uuid': g['uuid'], 'isOpen': False, 'children': children}
 
-def panel(name, frm, to, origin, rot, outside, inside, facing):
-    """A flat plane (one size 0). 'facing' = the face pointing away from her body: north/south/east/west."""
-    opposite = {'north': 'south', 'south': 'north', 'east': 'west', 'west': 'east'}[facing]
+cursor = {}
+def panel(pp):
+    """One flat plane: built facing front at its spot on the hip ellipse, tilted out at the hem (X) and turned to
+    face outward (Y), both about its own top edge so it stays attached at the waist."""
+    phi = math.radians(pp['phi'])
+    px, pz = pp['rx'] * math.sin(phi), -pp['rz'] * math.cos(phi)
+    nx, nz = math.sin(phi) / pp['rx'], -math.cos(phi) / pp['rz']
+    yaw = math.degrees(math.atan2(-nx, -nz))
+    w, L, top = pp['width'], pp['length'], pp['top']
+    frm, to = [px - w / 2, top - L, pz], [px + w / 2, top, pz]
+    key = (pp['layer'], pp['part'])
     faces = {k: {'uv': [0, 0, 0, 0], 'texture': None} for k in ('north', 'east', 'south', 'west', 'up', 'down')}
-    u, v, w, h = REGIONS[outside]
-    faces[facing] = {'uv': [u, v, u + w, v + h], 'texture': 0}
-    u, v, w, h = REGIONS[inside]
-    faces[opposite] = {'uv': [u + w, v, u, v + h], 'texture': 0}  # mirrored so it reads right from inside
-    e = {'name': name, 'box_uv': False, 'render_order': 'default', 'locked': False, 'export': True,
-         'allow_mirror_modeling': True, 'from': frm, 'to': to, 'autouv': 0, 'color': 3, 'origin': origin,
-         'rotation': rot, 'faces': faces, 'type': 'cube', 'uuid': uid()}
+    for side, face in (('out', 'north'), ('in', 'south')):
+        u0, v0 = strips[(pp['layer'], pp['part'], side)]
+        u = u0 + cursor.get(key, 0.0)
+        faces[face] = {'uv': [round(u, 3), v0, round(u + w, 3), v0 + L] if side == 'out' else [round(u + w, 3), v0, round(u, 3), v0 + L],
+                       'texture': 0}
+    cursor[key] = cursor.get(key, 0.0) + w
+    e = {'name': f"{pp['layer']}_{pp['part']}_{pp['i']}", 'box_uv': False, 'render_order': 'default', 'locked': False,
+         'export': True, 'allow_mirror_modeling': True, 'from': [round(v, 4) for v in frm], 'to': [round(v, 4) for v in to],
+         'autouv': 0, 'color': 3, 'origin': [round(px, 4), top, round(pz, 4)],
+         'rotation': [pp['flare'], round(yaw, 2), 0], 'faces': faces, 'type': 'cube', 'uuid': uid()}
     elements.append(e)
     return e['uuid']
 
-TOP_I, LEN_I, Z_I, X_I, FLARE_I = 13.0, 6.0, 2.3, 4.3, 10   # inner: hugs the hips, mid-thigh
-TOP_O, LEN_O, Z_O, X_O, FLARE_O = 13.5, 8.0, 3.0, 5.0, 18   # outer: a bit out, longer, more flare
-bi, bo = TOP_I - LEN_I, TOP_O - LEN_O
+children = {(l, p): [] for l in LAYERS for p in ('front', 'back', 'rest')}
+for pp in panels:
+    children[(pp['layer'], pp['part'])].append(panel(pp))
+inner = group('skirt_inner', [0, 13.0, 0], children[('inner', 'rest')])
+outer = group('skirt_outer', [0, 13.5, 0], children[('outer', 'rest')])
+front = group('skirt_front', [0, 13.0, -2.8], children[('inner', 'front')] + children[('outer', 'front')])
+back = group('skirt_back', [0, 13.0, 2.8], children[('inner', 'back')] + children[('outer', 'back')])
 
-front = group('skirt_front', [0, TOP_I, -Z_I], [
-    panel('inner_front', [-X_I, bi, -Z_I], [X_I, TOP_I, -Z_I], [0, TOP_I, -Z_I], [FLARE_I, 0, 0], 'inner_front', 'inner_front_in', 'north'),
-    panel('outer_front', [-X_O - 0.2, bo, -Z_O], [X_O + 0.2, TOP_O, -Z_O], [0, TOP_O, -Z_O], [FLARE_O, 0, 0], 'outer_front', 'outer_front_in', 'north'),
-])
-back = group('skirt_back', [0, TOP_I, Z_I], [
-    panel('inner_back', [-X_I, bi, Z_I], [X_I, TOP_I, Z_I], [0, TOP_I, Z_I], [-FLARE_I, 0, 0], 'inner_back', 'inner_back_in', 'south'),
-    panel('outer_back', [-X_O - 0.2, bo, Z_O], [X_O + 0.2, TOP_O, Z_O], [0, TOP_O, Z_O], [-FLARE_O, 0, 0], 'outer_back', 'outer_back_in', 'south'),
-])
-inner = group('skirt_inner', [0, TOP_I, 0], [
-    panel('inner_right', [X_I, bi, -Z_I], [X_I, TOP_I, Z_I], [X_I, TOP_I, 0], [0, 0, FLARE_I], 'inner_side', 'inner_side_in', 'east'),
-    panel('inner_left', [-X_I, bi, -Z_I], [-X_I, TOP_I, Z_I], [-X_I, TOP_I, 0], [0, 0, -FLARE_I], 'inner_side', 'inner_side_in', 'west'),
-])
-outer = group('skirt_outer', [0, TOP_O, 0], [
-    panel('outer_right', [X_O, bo, -Z_O - 0.2], [X_O, TOP_O, Z_O + 0.2], [X_O, TOP_O, 0], [0, 0, FLARE_O], 'outer_side', 'outer_side_in', 'east'),
-    panel('outer_left', [-X_O, bo, -Z_O - 0.2], [-X_O, TOP_O, Z_O + 0.2], [-X_O, TOP_O, 0], [0, 0, -FLARE_O], 'outer_side', 'outer_side_in', 'west'),
-])
-
-# Put the module inside the rig's (empty) skirt group.
 skirt_uuid = next(g['uuid'] for g in groups if g['name'] == 'skirt')
+for name in ('skirt_front', 'skirt_back'):  # the base rig's empty placeholders
+    old = [g for g in groups if g['name'] == name]
+    if len(old) > 1:
+        groups.remove(old[0])
 def place(nodes):
     for n in nodes:
         if isinstance(n, dict):
@@ -85,11 +121,6 @@ def place(nodes):
             if place(n.get('children', [])):
                 return True
     return False
-# the rig already had empty skirt_front / skirt_back groups: drop them
-for name in ('skirt_front', 'skirt_back'):
-    old = [g for g in groups if g['name'] == name]
-    if len(old) > 1:
-        groups.remove(old[0])
 assert place(base['outliner'])
 
 buf = io.BytesIO(); tex.save(buf, 'PNG')
@@ -99,4 +130,4 @@ t.update({'name': 'skirt_module.png', 'height': 128, 'uv_height': 128,
 base['resolution'] = {'width': 64, 'height': 128}
 base['name'] = 'skirt_module_girl'
 json.dump(base, open(out_path, 'w'))
-print('panels', sum(1 for e in elements if e['name'].startswith(('inner', 'outer'))), 'groups', [g['name'] for g in groups if 'skirt' in g['name']])
+print({k: len(v) for k, v in children.items()}, 'strip rows end at', y)
