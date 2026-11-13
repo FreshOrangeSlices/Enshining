@@ -14,8 +14,10 @@ uid = lambda: str(uuid.uuid4())
 LAYERS = {
     # name: panels, hip radii (x, z), top y, length, hem flare (deg), width overlap, angle offset (fraction of a step)
     'inner': dict(n=12, rx=4.6, rz=2.8, top=13.0, length=6.0, flare=14, overlap=1.25, offset=0.5, short=0.0),
-    'outer': dict(n=14, rx=5.1, rz=3.3, top=13.5, length=8.5, flare=24, overlap=1.3, offset=0.0, short=0.7),
+    'outer': dict(n=14, rx=5.1, rz=3.3, top=13.5, length=8.5, flare=24, overlap=1.3, offset=0.0, short=0.5),
 }
+PX = 2         # texture pixels per UV unit (double resolution, like her 128x256 texture)
+SLICE = 2.5    # UV width every panel gets in the texture: exactly 5 texture pixels, so edges land on pixel lines
 FRONT_DEG, BACK_DEG = 40, 40  # panels within this many degrees of straight front / back go in skirt_front / skirt_back
 
 def part_of(phi):
@@ -38,31 +40,30 @@ for layer, p in LAYERS.items():
 
 # --- texture: the base rig's 64x64 on top, skirt strips below (64x128) --------------------------------------------
 src = Image.open(io.BytesIO(base64.b64decode(base['textures'][0]['source'].split(',', 1)[1]))).convert('RGBA')
-tex = Image.new('RGBA', (64, 128), (0, 0, 0, 0))
-tex.paste(src, (0, 0))
+tex = Image.new('RGBA', (64 * PX, 128 * PX), (0, 0, 0, 0))
+tex.paste(src.resize((64 * PX, 64 * PX), Image.NEAREST), (0, 0))
 draw = ImageDraw.Draw(tex)
 COLORS = {('inner', 'out'): (205, 205, 210), ('inner', 'in'): (150, 150, 155),
           ('outer', 'out'): (170, 170, 178), ('outer', 'in'): (118, 118, 126)}
 strips, y = {}, 64
 for layer in ('inner', 'outer'):
-    h = math.ceil(max(pp['length'] for pp in panels if pp['layer'] == layer))
+    h = max(pp['length'] for pp in panels if pp['layer'] == layer)
     for side in ('out', 'in'):
         x = 0
         for part in ('rest', 'front', 'back'):
             ps = [pp for pp in panels if pp['layer'] == layer and pp['part'] == part]
-            w = sum(pp['width'] for pp in ps)
+            w = SLICE * len(ps)
             strips[(layer, part, side)] = [x, y]
             col = COLORS[(layer, side)]
             if part == 'front':
                 col = tuple(min(255, c + 12) for c in col[:2]) + (col[2] - 10,)  # front a touch warmer
-            draw.rectangle([x, y, x + math.ceil(w) - 1, y + h - 1], fill=col + (255,))
-            u = x
-            for pp in ps:  # a faint line at each panel edge, so seams are easy to see while painting
-                draw.line([round(u), y, round(u), y + h - 1], fill=tuple(c - 25 for c in col[:3]) + (255,))
-                u += pp['width']
-            x += math.ceil(w) + 1
+            draw.rectangle([x * PX, y * PX, (x + w) * PX - 1, (y + h) * PX - 1], fill=col + (255,))
+            for k in range(len(ps)):  # a faint line at each panel edge, so seams are easy to see while painting
+                u = (x + k * SLICE) * PX
+                draw.line([u, y * PX, u, (y + h) * PX - 1], fill=tuple(c - 25 for c in col[:3]) + (255,))
+            x += w + 1
         assert x <= 65, (layer, side, x)
-        y += h + 1
+        y += h + 0.5
 assert y <= 128
 
 groups, elements = base['groups'], base['elements']
@@ -89,9 +90,8 @@ def panel(pp):
     for side, face in (('out', 'north'), ('in', 'south')):
         u0, v0 = strips[(pp['layer'], pp['part'], side)]
         u = u0 + cursor.get(key, 0.0)
-        faces[face] = {'uv': [round(u, 3), v0, round(u + w, 3), v0 + L] if side == 'out' else [round(u + w, 3), v0, round(u, 3), v0 + L],
-                       'texture': 0}
-    cursor[key] = cursor.get(key, 0.0) + w
+        faces[face] = {'uv': [u, v0, u + SLICE, v0 + L] if side == 'out' else [u + SLICE, v0, u, v0 + L], 'texture': 0}
+    cursor[key] = cursor.get(key, 0.0) + SLICE
     e = {'name': f"{pp['layer']}_{pp['part']}_{pp['i']}", 'box_uv': False, 'render_order': 'default', 'locked': False,
          'export': True, 'allow_mirror_modeling': True, 'from': [round(v, 4) for v in frm], 'to': [round(v, 4) for v in to],
          'autouv': 0, 'color': 3, 'origin': [round(px, 4), top, round(pz, 4)],
@@ -125,7 +125,7 @@ assert place(base['outliner'])
 
 buf = io.BytesIO(); tex.save(buf, 'PNG')
 t = base['textures'][0]
-t.update({'name': 'skirt_module.png', 'height': 128, 'uv_height': 128,
+t.update({'name': 'skirt_module.png', 'width': 64 * PX, 'height': 128 * PX, 'uv_width': 64, 'uv_height': 128,
           'source': 'data:image/png;base64,' + base64.b64encode(buf.getvalue()).decode()})
 base['resolution'] = {'width': 64, 'height': 128}
 base['name'] = 'skirt_module_girl'
