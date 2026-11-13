@@ -102,6 +102,7 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 	private int comboEndTicks;    // ticks left in the ending
 	private int comboHitTicks;    // ticks until the current hit's impact lands
 	private int comboCancelTicks; // ticks until the next hit may cancel this one's recovery
+	private int comboRestTicks;   // after a finisher: a breather before a new combo starts
 	@Nullable
 	private LivingEntity comboTarget;
 	private int comboSeen = -1;   // client side: the last hit this client started playing
@@ -251,12 +252,20 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 		if (comboHits().isEmpty() || action() != ACTION_NONE) {
 			return false;
 		}
+		if (comboNext == 0 && comboRestTicks > 0) {
+			return false; // catching her breath after a full combo
+		}
 		// Animation cancel: once the hit has landed (plus a beat), the next one can cut its recovery short.
 		return comboPieceTicks == 0 || comboHitTicks == 0 && comboCancelTicks <= 0;
 	}
 
 	/** Her melee reach in blocks from her middle to the target's edge: the length of the weapon swing. */
 	public double meleeReach() {
+		return 2.0;
+	}
+
+	/** Seconds she waits after a full combo before starting the next one. */
+	protected double comboRest() {
 		return 2.0;
 	}
 
@@ -275,6 +284,9 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 		comboPieceTicks = comboTicks(hit.length());
 		comboHitTicks = Math.min(comboPieceTicks, comboTicks(hit.impact()));
 		comboCancelTicks = comboHitTicks + comboTicks(comboCancelDelay());
+		if (comboNext == 0) {
+			comboRestTicks = comboPieceTicks + (int) Math.round(comboRest() * 20); // the finisher, then a breather
+		}
 		comboWindowTicks = 0;
 		comboEndTicks = 0;
 		comboTarget = target;
@@ -317,6 +329,9 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 	private void tickCombo() {
 		if (comboCancelTicks > 0) {
 			comboCancelTicks--;
+		}
+		if (comboRestTicks > 0) {
+			comboRestTicks--;
 		}
 		if (comboHitTicks > 0 && --comboHitTicks == 0) {
 			LivingEntity target = comboTarget;
@@ -468,6 +483,7 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 				setInSittingPose(false);
 			}
 		});
+		goalSelector.addGoal(3, new PersonalSpaceGoal(this));
 		goalSelector.addGoal(4, new MeleeAttackGoal(this, 1.15, true) {
 			@Override
 			protected double getAttackReachSqr(LivingEntity target) {
