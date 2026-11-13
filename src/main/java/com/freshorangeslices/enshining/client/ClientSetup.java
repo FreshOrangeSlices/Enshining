@@ -19,5 +19,6 @@ public final class ClientSetup {
 	@SubscribeEvent
 	public static void renderers(EntityRenderersEvent.RegisterRenderers event) {
 		event.registerEntityRenderer(ModEntities.NOELLE.get(), NoelleRenderer::new);
+		event.registerEntityRenderer(ModEntities.NOELLE_FULL_COMBO.get(), NoelleRenderer::new);
 	}
 }

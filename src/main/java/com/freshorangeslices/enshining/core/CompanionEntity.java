@@ -101,7 +101,9 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 	private int comboPieceTicks;  // ticks left in the hit being played
 	private int comboWindowTicks; // ticks left to continue the combo after a hit
 	private int comboEndTicks;    // ticks left in the ending
-	private int comboHitTicks;    // ticks until the current hit's impact lands
+	private int[] comboImpacts = new int[0]; // when (ticks into the hit) each impact lands
+	private int comboImpactIndex; // impacts already landed
+	private int comboElapsed;     // ticks into the current hit
 	private int comboCancelTicks; // ticks until the next hit may cancel this one's recovery
 	private int comboRestTicks;   // after a finisher: a breather before a new combo starts
 	@Nullable
@@ -152,13 +154,18 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 	 * Blockbench (before {@link #comboSpeed()}).
 	 */
 	/**
-	 * One hit of a melee combo: its animation, its length, when its impact lands, and when its motion ends (its last
+	 * One hit of a melee combo: its animation, its length, when its impact(s) land, and when its motion ends (its last
 	 * keyframe; after that it only holds the pose). All in seconds as animated in Blockbench. The next hit may only
-	 * cancel this one once the motion has ended, so the two poses always meet (no flailing blend between them).
+	 * cancel this one once the motion has ended, so the two poses always meet (no flailing blend between them). A whole
+	 * combo can also be one "hit" with several impacts.
 	 */
-	public record ComboHit(RawAnimation animation, double length, double impact, double motionEnd) {
+	public record ComboHit(RawAnimation animation, double length, double[] impacts, double motionEnd) {
 		public ComboHit(String animation, double length, double impact, double motionEnd) {
-			this(RawAnimation.begin().thenPlayAndHold(animation), length, impact, motionEnd);
+			this(RawAnimation.begin().thenPlayAndHold(animation), length, new double[] {impact}, motionEnd);
+		}
+
+		public ComboHit(String animation, double length, double[] impacts, double motionEnd) {
+			this(RawAnimation.begin().thenPlayAndHold(animation), length, impacts, motionEnd);
 		}
 	}
 
@@ -272,7 +279,7 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 			return false; // catching her breath after a full combo
 		}
 		// Animation cancel: once the hit has landed (plus a beat), the next one can cut its recovery short.
-		return comboPieceTicks == 0 || comboHitTicks == 0 && comboCancelTicks <= 0;
+		return comboPieceTicks == 0 || comboImpactIndex >= comboImpacts.length && comboCancelTicks <= 0;
 	}
 
 	/** Her melee reach in blocks from her middle to the target's edge: the length of the weapon swing. */
@@ -298,9 +305,16 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 		comboNext = (index + 1) % hits.size();
 		comboCount = (comboCount + 1) & 0xFFFFF;
 		comboPieceTicks = comboTicks(hit.length());
-		comboHitTicks = Math.min(comboPieceTicks, comboTicks(hit.impact()));
+		comboImpacts = new int[hit.impacts().length];
+		for (int i = 0; i < comboImpacts.length; i++) {
+			comboImpacts[i] = Math.min(comboPieceTicks, comboTicks(hit.impacts()[i]));
+		}
+		java.util.Arrays.sort(comboImpacts);
+		comboImpactIndex = 0;
+		comboElapsed = 0;
+		int lastImpact = comboImpacts.length == 0 ? 0 : comboImpacts[comboImpacts.length - 1];
 		comboCancelTicks = Math.min(comboPieceTicks,
-				Math.max(comboHitTicks + comboTicks(comboCancelDelay()), (int) Math.ceil(hit.motionEnd() / comboSpeed() * 20) + 1));
+				Math.max(lastImpact + comboTicks(comboCancelDelay()), (int) Math.ceil(hit.motionEnd() / comboSpeed() * 20) + 1));
 		if (comboNext == 0) {
 			comboRestTicks = comboPieceTicks + (int) Math.round(comboRest() * 20); // the finisher, then a breather
 		}
@@ -346,7 +360,8 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 		comboPieceTicks = 0;
 		comboWindowTicks = 0;
 		comboEndTicks = 0;
-		comboHitTicks = 0;
+		comboImpacts = new int[0];
+		comboImpactIndex = 0;
 		comboTarget = null;
 		entityData.set(COMBO, comboCount << 3);
 	}
@@ -358,12 +373,15 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 		if (comboRestTicks > 0) {
 			comboRestTicks--;
 		}
-		if (comboHitTicks > 0 && --comboHitTicks == 0) {
-			LivingEntity target = comboTarget;
-			comboTarget = null;
-			double reach = meleeReach() * meleeReachScale() + target.getBbWidth() / 2.0 + 0.5; // a little give
-			if (target != null && target.isAlive() && distanceTo(target) <= reach) {
-				doHurtTarget(target);
+		if (comboPieceTicks > 0) {
+			comboElapsed++;
+			while (comboImpactIndex < comboImpacts.length && comboElapsed >= comboImpacts[comboImpactIndex]) {
+				comboImpactIndex++;
+				LivingEntity target = comboTarget;
+				if (target != null && target.isAlive()
+						&& distanceTo(target) <= meleeReach() * meleeReachScale() + target.getBbWidth() / 2.0 + 0.5) { // a little give
+					doHurtTarget(target);
+				}
 			}
 		}
 		if (comboPieceTicks > 0 && --comboPieceTicks == 0) {
