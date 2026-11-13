@@ -103,6 +103,63 @@ public class CompanionModel<T extends CompanionEntity> extends DefaultedEntityGe
 		sway("skirt_hem", 1.2F, 0.025F * heavy, trail * 0.2F, 0.04F, swing, amount, time, animated);
 		sway("bow_tail_left", 0.4F, 0.06F * heavy, trail * 3.0F, 0.35F, swing, amount, time, animated);
 		sway("bow_tail_right", 0.9F, 0.06F * heavy, trail * 3.0F, 0.35F, swing, amount, time, animated);
+		skirtFollowsLegs();
+		flow(companion, state, time, swing, amount);
+	}
+
+	/**
+	 * A skirt rebuilt with "skirt_front" / "skirt_back" bones: the front panel is pushed forward by whichever thigh
+	 * lifts forward, the back one by whichever kicks back (about half as far), so legs never poke through.
+	 * Rotation here reads like Blockbench: negative X = forward.
+	 */
+	private void skirtFollowsLegs() {
+		CoreGeoBone right = getAnimationProcessor().getBone("right_leg");
+		CoreGeoBone left = getAnimationProcessor().getBone("left_leg");
+		if (right == null || left == null) {
+			return;
+		}
+		float r = right.getRotX() - right.getInitialSnapshot().getRotX();
+		float l = left.getRotX() - left.getInitialSnapshot().getRotX();
+		CoreGeoBone front = getAnimationProcessor().getBone("skirt_front");
+		if (front != null) {
+			front.setRotX(front.getRotX() + 0.55F * Math.min(0.0F, Math.min(r, l)));
+		}
+		CoreGeoBone back = getAnimationProcessor().getBone("skirt_back");
+		if (back != null) {
+			back.setRotX(back.getRotX() + 0.55F * Math.max(0.0F, Math.max(r, l)));
+		}
+	}
+
+	/**
+	 * Secondary motion for every bone named "flow_...": hair strands, ribbons, capes, tassels. Added on top of the
+	 * animation (so keys still work), it trails behind when she moves, swings with her steps, lifts when she falls,
+	 * swings out when she turns, and drifts a little when still. A flow bone inside another flow bone moves a beat
+	 * later and a bit more, so chains (flow_ribbon > flow_ribbon_tip) ripple.
+	 */
+	private void flow(T companion, AnimationState<T> state, float time, float swing, float amount) {
+		float fall = Mth.clamp((float) -companion.getDeltaMovement().y * 1.2F, -0.15F, 0.4F);
+		float turn = Mth.clamp(Mth.wrapDegrees(companion.yBodyRot - companion.yBodyRotO) * -0.02F, -0.35F, 0.35F);
+		float speed = Mth.clamp(amount * (companion.isSprinting() ? 0.35F : 0.18F), 0.0F, 0.4F);
+		for (CoreGeoBone bone : getAnimationProcessor().getRegisteredBones()) {
+			if (!bone.getName().startsWith("flow_")) {
+				continue;
+			}
+			int depth = 0;
+			for (CoreGeoBone parent = bone.getParent(); parent != null; parent = parent.getParent()) {
+				if (parent.getName().startsWith("flow_")) {
+					depth++;
+				}
+			}
+			float phase = (bone.getName().hashCode() & 0xFF) / 255.0F * Mth.TWO_PI;
+			float lag = depth * 0.7F;
+			float more = 1.0F + depth * 0.35F;
+			float x = speed + fall
+					+ (float) Math.sin(swing * 0.6662F - lag) * amount * 0.06F
+					+ (float) Math.sin(time * 0.07F + phase - lag) * 0.035F;
+			float z = turn + (float) Math.sin(time * 0.05F + phase - lag) * 0.03F;
+			bone.setRotX(bone.getRotX() + Mth.clamp(x * more, -0.3F, 0.8F));
+			bone.setRotZ(bone.getRotZ() + Mth.clamp(z * more, -0.5F, 0.5F));
+		}
 	}
 
 	/**
