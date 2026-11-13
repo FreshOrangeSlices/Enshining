@@ -54,7 +54,7 @@ public class CompanionRenderer<T extends CompanionEntity> extends GeoEntityRende
 					return null;
 				}
 				return switch (bone.getName()) {
-					case "right_hand" -> companion.playingMove() ? companion.getMainHandItem() : null;
+					case "right_hand" -> companion.showsWeaponInHand() ? companion.getMainHandItem() : null;
 					case "weapon_back" -> companion.showBackWeapon() ? companion.getMainHandItem() : null;
 					default -> null;
 				};

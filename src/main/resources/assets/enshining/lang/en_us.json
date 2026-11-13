@@ -19,5 +19,9 @@
   "enshining.menu.on": "On",
   "enshining.menu.off": "Off",
   "enshining.menu.status": "Lv %s  XP %s/%s",
-  "enshining.menu.status2": "HP %s/%s  Energy %s/%s"
+  "enshining.menu.status2": "HP %s/%s  Energy %s/%s",
+  "enshining.menu.level": "Lv %s",
+  "enshining.menu.hp": "HP %s/%s",
+  "enshining.menu.atk": "ATK %s",
+  "enshining.menu.def": "DEF %s"
 }

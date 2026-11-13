@@ -72,7 +72,7 @@ public class CompanionModel<T extends CompanionEntity> extends DefaultedEntityGe
 		if (weapon != null) {
 			// Out only while she's swinging, holding a hit's pose, or casting (like Genshin): her walk and run were
 			// made without the claymore, and carrying it through them drags the blade through the ground.
-			weapon.setHidden(!companion.playingMove() || companion.holdsSwappedWeapon() || !companion.setting(CompanionEntity.SHOW_WEAPON));
+			weapon.setHidden(!companion.showsWeaponInHand() || companion.holdsSwappedWeapon() || !companion.setting(CompanionEntity.SHOW_WEAPON));
 		}
 		// The claymore hovering behind her after a fight (a separate bone, if the model has one), bobbing gently.
 		CoreGeoBone back = getAnimationProcessor().getBone("weapon_back");

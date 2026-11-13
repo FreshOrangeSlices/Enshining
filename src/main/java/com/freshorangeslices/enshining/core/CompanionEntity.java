@@ -20,6 +20,7 @@ import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.TamableAnimal;
+import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraftforge.network.NetworkHooks;
 import net.minecraft.world.SimpleMenuProvider;
 import net.minecraft.server.level.ServerPlayer;
@@ -316,6 +317,34 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 	/** Client side: 0..1, how much the head should follow the look direction this frame (eases in and out). */
 	public float lookBlend(float partialTick) {
 		return Mth.lerp(partialTick, lookBlendO, lookBlend);
+	}
+
+	// ---- Menu portrait (a client-only copy shown in her menu) --------------------------------------------------
+
+	@Nullable
+	private RawAnimation menuAnimation;
+	private boolean menuShowsWeapon;
+
+	/** Client side, menu portrait copies only: the pose to play (null = normal behaviour) and whether her weapon is out. */
+	public void setMenuPose(@Nullable RawAnimation animation, boolean showWeapon) {
+		menuAnimation = animation;
+		menuShowsWeapon = showWeapon;
+	}
+
+	/** Copies what the portrait needs from the real companion: her gear and her visibility settings. */
+	public void copyLookFrom(CompanionEntity real) {
+		for (EquipmentSlot slot : CompanionMenu.SLOTS) {
+			ItemStack want = real.getItemBySlot(slot);
+			if (!ItemStack.matches(getItemBySlot(slot), want)) {
+				setItemSlot(slot, want.copy());
+			}
+		}
+		entityData.set(SETTINGS, real.entityData.get(SETTINGS));
+	}
+
+	/** Client side: the weapon is in her hand (swinging, casting, or posing in the menu). */
+	public boolean showsWeaponInHand() {
+		return playingMove || menuShowsWeapon;
 	}
 
 	/** Seconds the claymore keeps hovering behind her after a fight before she dismisses it. */
@@ -947,6 +976,13 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 	@Override
 	public void registerControllers(AnimatableManager.ControllerRegistrar controllers) {
 		controllers.add(new AnimationController<>(this, "main", 3, state -> {
+			if (menuAnimation != null) {
+				// A menu portrait copy: plays whatever pose the menu asks for.
+				playingMove = false;
+				state.getController().setAnimationSpeed(1.0);
+				state.getController().setTransitionLength(5);
+				return state.setAndContinue(menuAnimation);
+			}
 			int action = action();
 			playingMove = true;
 			if (action == ACTION_BURST) {

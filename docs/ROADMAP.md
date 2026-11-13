@@ -15,6 +15,14 @@ Nothing here is built yet unless marked done. Order is roughly the order we'll d
 - Behavior: Aggressive (any hostile) / Wait for leader (what you hit, or what hits you or her) / Passive.
 - Follow / Wander / Stay, level, health, energy.
 
+## Menu portrait (layout built; poses are yours)
+- Big animated portrait of her (a copy that only exists in the menu), full body by default.
+- Hovering or changing the weapon slot: camera eases in toward her hands, she plays `animation.companion.menu_weapon`
+  holding her weapon. Hovering or changing an armor slot: eases in on her upper body, `animation.companion.menu_armor`
+  (the praying-hands pose). Otherwise `animation.companion.menu_idle`. Missing ones fall back to her normal idle.
+- Bottom bar: eye (armor shown), sword (weapon shown), colored dot (green passive / yellow wait for leader /
+  red aggressive), arrow (follow / wander / stay); skill and burst toggles on the right.
+
 ## Armor and weapons
 - Armor drawn in segments on our joints (each segment uses its slice of the armor texture), so it bends.
   Vanilla and most modded armor; dyes; trims later. Special 3D-model armor: still protects, auto-hidden.

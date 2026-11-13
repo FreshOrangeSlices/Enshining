@@ -21,6 +21,8 @@ import net.minecraft.world.item.ItemStack;
 public class CompanionMenu extends AbstractContainerMenu {
 	public static final EquipmentSlot[] SLOTS = {EquipmentSlot.HEAD, EquipmentSlot.CHEST, EquipmentSlot.LEGS, EquipmentSlot.FEET,
 			EquipmentSlot.MAINHAND};
+	/** Layout (shared with the screen): armor down the left of her portrait, the weapon on its right, inventory below. */
+	public static final int ARMOR_X = 22, ARMOR_Y = 26, ARMOR_STEP = 30, WEAPON_X = 218, WEAPON_Y = 70, INV_X = 48, INV_Y = 186;
 	public static final int BUTTON_MODE = 0, BUTTON_BEHAVIOR = 1, BUTTON_ARMOR = 2, BUTTON_WEAPON = 3, BUTTON_SKILL = 4,
 			BUTTON_BURST = 5;
 
@@ -66,7 +68,7 @@ public class CompanionMenu extends AbstractContainerMenu {
 		Container equipment = new Equipment(companion);
 		for (int i = 0; i < 4; i++) {
 			EquipmentSlot slot = SLOTS[i];
-			addSlot(new Slot(equipment, i, 8, 18 + i * 18) {
+			addSlot(new Slot(equipment, i, ARMOR_X, ARMOR_Y + i * ARMOR_STEP) {
 				@Override
 				public boolean mayPlace(ItemStack stack) {
 					return companion != null && stack.canEquip(slot, companion);
@@ -78,7 +80,7 @@ public class CompanionMenu extends AbstractContainerMenu {
 				}
 			});
 		}
-		addSlot(new Slot(equipment, 4, 8, 96) {
+		addSlot(new Slot(equipment, 4, WEAPON_X, WEAPON_Y) {
 			@Override
 			public boolean mayPlace(ItemStack stack) {
 				return isWeapon(stack);
@@ -91,11 +93,11 @@ public class CompanionMenu extends AbstractContainerMenu {
 		});
 		for (int row = 0; row < 3; row++) {
 			for (int col = 0; col < 9; col++) {
-				addSlot(new Slot(inventory, col + row * 9 + 9, 8 + col * 18, 148 + row * 18));
+				addSlot(new Slot(inventory, col + row * 9 + 9, INV_X + col * 18, INV_Y + row * 18));
 			}
 		}
 		for (int col = 0; col < 9; col++) {
-			addSlot(new Slot(inventory, col, 8 + col * 18, 206));
+			addSlot(new Slot(inventory, col, INV_X + col * 18, INV_Y + 58));
 		}
 		addDataSlots(data);
 	}
