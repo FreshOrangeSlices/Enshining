@@ -47,6 +47,7 @@ import software.bernie.geckolib.core.animatable.instance.AnimatableInstanceCache
 import software.bernie.geckolib.core.animation.AnimatableManager;
 import software.bernie.geckolib.core.animation.AnimationController;
 import software.bernie.geckolib.core.animation.RawAnimation;
+import software.bernie.geckolib.core.state.BoneSnapshot;
 import software.bernie.geckolib.core.object.PlayState;
 import software.bernie.geckolib.util.GeckoLibUtil;
 
@@ -106,7 +107,9 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 	@Nullable
 	private LivingEntity comboTarget;
 	private int comboSeen = -1;   // client side: the last hit this client started playing
-	private float comboYaw;       // the way she faces for the whole of a hit (turning mid-swing spins the animation)
+	private boolean comboShowing; // client side: a combo animation was showing last frame
+	private float comboYaw;
+	private float comboAimYaw;       // the way she faces for the whole of a hit (turning mid-swing spins the animation)
 
 	protected CompanionEntity(EntityType<? extends TamableAnimal> type, Level level) {
 		super(type, level);
@@ -297,7 +300,7 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 		comboPieceTicks = comboTicks(hit.length());
 		comboHitTicks = Math.min(comboPieceTicks, comboTicks(hit.impact()));
 		comboCancelTicks = Math.min(comboPieceTicks,
-				Math.max(comboHitTicks + comboTicks(comboCancelDelay()), comboTicks(hit.motionEnd())));
+				Math.max(comboHitTicks + comboTicks(comboCancelDelay()), (int) Math.ceil(hit.motionEnd() / comboSpeed() * 20) + 1));
 		if (comboNext == 0) {
 			comboRestTicks = comboPieceTicks + (int) Math.round(comboRest() * 20); // the finisher, then a breather
 		}
@@ -307,7 +310,9 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 		combatTicks = 60;
 		double dx = target.getX() - getX();
 		double dz = target.getZ() - getZ();
-		comboYaw = (float) (Mth.atan2(dz, dx) * Mth.RAD_TO_DEG) - 90.0F;
+		// Aim at the target, but turn there quickly over the first ticks instead of snapping (a snap reads as a spin).
+		comboAimYaw = (float) (Mth.atan2(dz, dx) * Mth.RAD_TO_DEG) - 90.0F;
+		comboYaw = yBodyRot;
 		lockFacing();
 		entityData.set(COMBO, comboCount << 3 | (index + 1));
 	}
@@ -331,6 +336,7 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 		}
 		// Locked facing for the whole of a hit: the AI's look/turn this tick is undone before it's sent to players.
 		if (!level().isClientSide && comboPieceTicks > 0) {
+			comboYaw = Mth.approachDegrees(comboYaw, comboAimYaw, 20.0F);
 			lockFacing();
 		}
 	}
@@ -757,7 +763,13 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 			if (!comboHits().isEmpty()) {
 				PlayState combo = comboState(state);
 				if (combo != null) {
+					comboShowing = true;
 					return combo;
+				}
+				if (comboShowing) {
+					// Leaving the combo for idle/walk: blend back the short way, not unwinding its spins.
+					comboShowing = false;
+					unwindSnapshots();
 				}
 			}
 			state.getController().setAnimationSpeed(1.0);
@@ -808,6 +820,9 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 		var controller = state.getController();
 		if (count != comboSeen) {
 			comboSeen = count;
+			// Start the blend into the next hit from the same pose counted within one turn, so a pose like 240 degrees
+			// meets a hit starting at -120 (the same angle) without the sword whirling all the way round.
+			unwindSnapshots();
 			controller.setAnimationSpeed(comboSpeed());
 			controller.setTransitionLength(2); // hits snap in
 			controller.forceAnimationReset();
@@ -818,6 +833,25 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 			return null;
 		}
 		return PlayState.CONTINUE;
+	}
+
+	/**
+	 * GeckoLib blends from each bone's last pose to the next animation's first frame by its raw numbers, so a bone at
+	 * 240 degrees would swing 360 the long way round to reach -120. Bring every bone's last pose within one turn of
+	 * its rest (same look, smaller numbers) right before a blend starts; animation starts are kept within one turn too.
+	 */
+	private void unwindSnapshots() {
+		var snapshots = getAnimatableInstanceCache().getManagerForId(getId()).getBoneSnapshotCollection();
+		for (BoneSnapshot snapshot : snapshots.values()) {
+			BoneSnapshot rest = snapshot.getBone().getInitialSnapshot();
+			snapshot.updateRotation(rest.getRotX() + unwind(snapshot.getRotX() - rest.getRotX()),
+					rest.getRotY() + unwind(snapshot.getRotY() - rest.getRotY()),
+					rest.getRotZ() + unwind(snapshot.getRotZ() - rest.getRotZ()));
+		}
+	}
+
+	private static float unwind(float radians) {
+		return (float) (radians - Mth.TWO_PI * Math.round(radians / Mth.TWO_PI));
 	}
 
 	@Override
