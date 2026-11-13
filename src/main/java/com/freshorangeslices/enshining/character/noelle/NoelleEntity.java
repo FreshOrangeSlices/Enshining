@@ -46,13 +46,13 @@ public class NoelleEntity extends CompanionEntity {
 	private static final RawAnimation BURST = RawAnimation.begin().thenPlay("animation.noelle.burst");
 	/**
 	 * Her four-hit combo, cut from one long Blockbench animation (lengths and impact times in seconds as animated):
-	 * 0-0.6667, 0.6667-1.7917, 1.7917-2.4583, 2.4583-3.0833, then the ending 3.0833-5.1667.
+	 * re-timed by the user as separate pieces (hits 0.83 / 1.25 / 0.83 / 0.75s, ending 2.29s).
 	 */
 	private static final List<ComboHit> COMBO = List.of(
-			new ComboHit("animation.noelle.attack1", 0.6667, 0.4167),
-			new ComboHit("animation.noelle.attack2", 1.125, 0.5417),
-			new ComboHit("animation.noelle.attack3", 0.6667, 0.6667),
-			new ComboHit("animation.noelle.attack4", 0.625, 0.625));
+			new ComboHit("animation.noelle.attack1", 0.8333, 0.4167),
+			new ComboHit("animation.noelle.attack2", 1.25, 0.5417),
+			new ComboHit("animation.noelle.attack3", 0.8333, 0.6667),
+			new ComboHit("animation.noelle.attack4", 0.75, 0.625));
 	private static final RawAnimation COMBO_END = RawAnimation.begin().thenPlay("animation.noelle.combo_end");
 
 	private int shieldTicks;
@@ -288,7 +288,7 @@ public class NoelleEntity extends CompanionEntity {
 
 	@Override
 	protected double comboEndLength() {
-		return 2.0833;
+		return 2.2917;
 	}
 
 	@Override
