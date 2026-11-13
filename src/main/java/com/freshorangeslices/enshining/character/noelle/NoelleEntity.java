@@ -49,10 +49,10 @@ public class NoelleEntity extends CompanionEntity {
 	 * re-timed by the user as separate pieces (hits 0.83 / 1.25 / 0.83 / 0.75s, ending 2.29s).
 	 */
 	private static final List<ComboHit> COMBO = List.of(
-			new ComboHit("animation.noelle.attack1", 0.8333, 0.4167),
-			new ComboHit("animation.noelle.attack2", 1.25, 0.5417),
-			new ComboHit("animation.noelle.attack3", 0.8333, 0.6667),
-			new ComboHit("animation.noelle.attack4", 0.75, 0.625));
+			new ComboHit("animation.noelle.attack1", 0.8333, 0.4167, 0.6667),
+			new ComboHit("animation.noelle.attack2", 1.25, 0.5417, 1.125),
+			new ComboHit("animation.noelle.attack3", 0.8333, 0.6667, 0.6667),
+			new ComboHit("animation.noelle.attack4", 0.75, 0.625, 0.625));
 	private static final RawAnimation COMBO_END = RawAnimation.begin().thenPlay("animation.noelle.combo_end");
 
 	private int shieldTicks;

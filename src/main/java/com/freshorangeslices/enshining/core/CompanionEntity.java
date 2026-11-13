@@ -148,9 +148,14 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 	 * One hit of a melee combo: its animation, its length and when its impact lands, both in seconds as animated in
 	 * Blockbench (before {@link #comboSpeed()}).
 	 */
-	public record ComboHit(RawAnimation animation, double length, double impact) {
-		public ComboHit(String animation, double length, double impact) {
-			this(RawAnimation.begin().thenPlayAndHold(animation), length, impact);
+	/**
+	 * One hit of a melee combo: its animation, its length, when its impact lands, and when its motion ends (its last
+	 * keyframe; after that it only holds the pose). All in seconds as animated in Blockbench. The next hit may only
+	 * cancel this one once the motion has ended, so the two poses always meet (no flailing blend between them).
+	 */
+	public record ComboHit(RawAnimation animation, double length, double impact, double motionEnd) {
+		public ComboHit(String animation, double length, double impact, double motionEnd) {
+			this(RawAnimation.begin().thenPlayAndHold(animation), length, impact, motionEnd);
 		}
 	}
 
@@ -229,6 +234,14 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 		return entityData.get(COMBAT);
 	}
 
+	private float lookBlend = 1.0F;  // client side: how much the head looks at things (0 in a fight), eased per tick
+	private float lookBlendO = 1.0F;
+
+	/** Client side: 0..1, how much the head should follow the look direction this frame (eases in and out). */
+	public float lookBlend(float partialTick) {
+		return Mth.lerp(partialTick, lookBlendO, lookBlend);
+	}
+
 	/** Client side: true while an attack, skill or burst animation is playing (the head follows the animation then). */
 	public boolean playingMove() {
 		return playingMove;
@@ -283,7 +296,8 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 		comboCount = (comboCount + 1) & 0xFFFFF;
 		comboPieceTicks = comboTicks(hit.length());
 		comboHitTicks = Math.min(comboPieceTicks, comboTicks(hit.impact()));
-		comboCancelTicks = comboHitTicks + comboTicks(comboCancelDelay());
+		comboCancelTicks = Math.min(comboPieceTicks,
+				Math.max(comboHitTicks + comboTicks(comboCancelDelay()), comboTicks(hit.motionEnd())));
 		if (comboNext == 0) {
 			comboRestTicks = comboPieceTicks + (int) Math.round(comboRest() * 20); // the finisher, then a breather
 		}
@@ -310,6 +324,11 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 	@Override
 	public void tick() {
 		super.tick();
+		if (level().isClientSide) {
+			lookBlendO = lookBlend;
+			float want = playingMove || inCombat() ? 0.0F : 1.0F;
+			lookBlend += Mth.clamp(want - lookBlend, -0.1F, 0.1F); // half a second to ease the look in or out
+		}
 		// Locked facing for the whole of a hit: the AI's look/turn this tick is undone before it's sent to players.
 		if (!level().isClientSide && comboPieceTicks > 0) {
 			lockFacing();
