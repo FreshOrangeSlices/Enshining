@@ -75,6 +75,7 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 
 	private static final UUID LEVEL_HEALTH = UUID.fromString("5e3b1c2a-7d41-4c55-9a0e-0e1a1f000001");
 	private static final UUID LEVEL_ATTACK = UUID.fromString("5e3b1c2a-7d41-4c55-9a0e-0e1a1f000002");
+	private static final UUID COMBO_SLOW = UUID.fromString("5e3b1c2a-7d41-4c55-9a0e-0e1a1f000003");
 
 	protected static final RawAnimation IDLE = RawAnimation.begin().thenLoop("animation.companion.idle");
 	protected static final RawAnimation WALK = RawAnimation.begin().thenLoop("animation.companion.walk");
@@ -162,6 +163,11 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 
 	protected double comboEndLength() {
 		return 0;
+	}
+
+	/** Her movement speed (attribute value) while a combo is going: between hits she only edges forward. */
+	protected double comboMoveSpeed() {
+		return 0.1;
 	}
 
 	/** How much faster than animated the combo plays in-game. */
@@ -502,6 +508,18 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 		}
 		tickAbilities();
 		tickCombo();
+		boolean comboActive = comboPieceTicks > 0 || comboWindowTicks > 0 || comboEndTicks > 0;
+		var speed = getAttribute(Attributes.MOVEMENT_SPEED);
+		if (speed != null) {
+			boolean slowed = speed.getModifier(COMBO_SLOW) != null;
+			if (comboActive && !slowed) {
+				double base = speed.getValue();
+				speed.addTransientModifier(new AttributeModifier(COMBO_SLOW, "Combo footwork", comboMoveSpeed() / base - 1.0,
+						AttributeModifier.Operation.MULTIPLY_TOTAL));
+			} else if (!comboActive && slowed) {
+				speed.removeModifier(COMBO_SLOW);
+			}
+		}
 		if (comboPieceTicks > 0) {
 			// Planted while a hit plays: no sliding along in the middle of a swing, just turn to face the target.
 			getNavigation().stop();
@@ -520,7 +538,7 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 		}
 		entityData.set(COMBAT, combatTicks > 0);
 		// Sprinting (synced) while chasing or catching up, so clients pick the run animation; strolling stays a walk.
-		setSprinting(getNavigation().isInProgress() && getMoveControl().getSpeedModifier() >= 1.05);
+		setSprinting(!comboActive && getNavigation().isInProgress() && getMoveControl().getSpeedModifier() >= 1.05);
 
 		LivingEntity target = getTarget();
 		if (target == null || !target.isAlive() || distanceToSqr(target) > 36 || comboPieceTicks > 0) {
