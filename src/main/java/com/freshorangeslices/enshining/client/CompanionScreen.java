@@ -44,9 +44,9 @@ public class CompanionScreen extends AbstractContainerScreen<CompanionMenu> {
 	private enum Focus { FULL, WEAPON, ARMOR }
 
 	/** Camera per focus: pixels per block, the body height (blocks) centred in the frame, and turn (degrees). */
-	private static final float[] SCALE = {61.3F, 125.0F, 125.0F};
-	private static final float[] AIM = {1.0F, 1.05F, 1.35F};
-	private static final float[] TURN = {0.0F, 0.0F, 0.0F};
+	// Tuned in-game: full body as built; weapon 80 / 1.25; armor 90 / 1.35 and always facing forward.
+	private static final float[] SCALE = {61.3F, 80.0F, 90.0F};
+	private static final float[] AIM = {1.0F, 1.25F, 1.35F};
 
 	// Tuning panel (beside the menu): lock a pose and set its camera by hand, to read off the numbers.
 	@Nullable
@@ -96,7 +96,7 @@ public class CompanionScreen extends AbstractContainerScreen<CompanionMenu> {
 			if (tuning != null) {
 				tuneScale = SCALE[tuning.ordinal()];
 				tuneAim = AIM[tuning.ordinal()];
-				tuneTurn = TURN[tuning.ordinal()];
+				tuneTurn = tuning == Focus.WEAPON && menu.companion() != null ? menu.companion().menuWeaponTurn() : 0.0F;
 			}
 			rebuildWidgets();
 		}).bounds(tx, ty, w, 18).build());
@@ -247,7 +247,8 @@ public class CompanionScreen extends AbstractContainerScreen<CompanionMenu> {
 		int boxH = PY1 - PY0;
 		int to = focus.ordinal();
 		float scale = Mth.lerp(eased, SCALE[0], SCALE[to == 0 ? 1 : to]);   // pixels per block: full body -> close-up
-		float turn = Mth.lerp(eased, TURN[0], TURN[to]);
+		// Only the weapon close-up turns, by an amount each character sets (how they hold their weapon differs).
+		float turn = focus == Focus.WEAPON && menu.companion() != null ? eased * menu.companion().menuWeaponTurn() : 0.0F;
 		if (tuning != null) {
 			scale = tuneScale;
 			aim = tuneAim;
@@ -294,6 +295,14 @@ public class CompanionScreen extends AbstractContainerScreen<CompanionMenu> {
 
 	@Override
 	protected void renderLabels(GuiGraphics g, int mouseX, int mouseY) {
+		// In front of the portrait: the 3D model is drawn out toward the viewer, so lift the overlay above it.
+		g.pose().pushPose();
+		g.pose().translate(0, 0, 400);
+		drawOverlay(g);
+		g.pose().popPose();
+	}
+
+	private void drawOverlay(GuiGraphics g) {
 		g.drawString(font, title, titleLabelX, titleLabelY, TEXT, true);
 		g.drawString(font, playerInventoryTitle, inventoryLabelX, inventoryLabelY, DIM, false);
 		CompanionEntity c = menu.companion();

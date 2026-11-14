@@ -342,6 +342,11 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 		entityData.set(SETTINGS, real.entityData.get(SETTINGS));
 	}
 
+	/** Degrees the menu portrait turns for the weapon close-up (each character holds their weapon differently). */
+	public float menuWeaponTurn() {
+		return 0.0F;
+	}
+
 	/** Client side: the weapon is in her hand (swinging, casting, or posing in the menu). */
 	public boolean showsWeaponInHand() {
 		return playingMove || menuShowsWeapon;
