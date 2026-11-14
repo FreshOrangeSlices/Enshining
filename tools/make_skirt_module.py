@@ -14,10 +14,11 @@ uid = lambda: str(uuid.uuid4())
 LAYERS = {
     # name: panels, hip radii (x, z), top y, length, hem flare (deg), width overlap, angle offset (fraction of a step)
     'inner': dict(n=12, rx=4.6, rz=2.8, top=13.0, length=6.0, flare=14, overlap=1.25, offset=0.5, short=0.0),
-    'outer': dict(n=14, rx=5.1, rz=3.3, top=13.5, length=8.5, flare=24, overlap=1.3, offset=0.0, short=0.5),
+    'outer': dict(n=14, rx=5.1, rz=3.3, top=13.5, length=9.0, flare=24, overlap=1.3, offset=0.0, short=1.0),
 }
-PX = 2         # texture pixels per UV unit (double resolution, like her 128x256 texture)
-SLICE = 2.5    # UV width every panel gets in the texture: exactly 5 texture pixels, so edges land on pixel lines
+import os
+PX = int(os.environ.get('PX', '1'))           # texture pixels per UV unit (1 = classic skin pixels)
+SLICE = float(os.environ.get('SLICE', '3'))   # UV width every panel gets in the texture (whole pixels)
 FRONT_DEG, BACK_DEG = 40, 40  # panels within this many degrees of straight front / back go in skirt_front / skirt_back
 
 def part_of(phi):
@@ -63,7 +64,7 @@ for layer in ('inner', 'outer'):
                 draw.line([u, y * PX, u, (y + h) * PX - 1], fill=tuple(c - 25 for c in col[:3]) + (255,))
             x += w + 1
         assert x <= 65, (layer, side, x)
-        y += h + 0.5
+        y += h + 1
 assert y <= 128
 
 groups, elements = base['groups'], base['elements']
