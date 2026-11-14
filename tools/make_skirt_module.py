@@ -19,6 +19,8 @@ LAYERS = {
 import os
 PX = int(os.environ.get('PX', '1'))           # texture pixels per UV unit (1 = classic skin pixels)
 SLICE = float(os.environ.get('SLICE', '3'))   # UV width every panel gets in the texture (whole pixels)
+VS = float(os.environ.get('VS', '1'))         # UV units per model pixel down a panel (2 = double detail)
+CW, CH = int(os.environ.get('CW', '64')), int(os.environ.get('CH', '128'))  # texture grid size
 FRONT_DEG, BACK_DEG = 40, 40  # panels within this many degrees of straight front / back go in skirt_front / skirt_back
 
 def part_of(phi):
@@ -41,14 +43,14 @@ for layer, p in LAYERS.items():
 
 # --- texture: the base rig's 64x64 on top, skirt strips below (64x128) --------------------------------------------
 src = Image.open(io.BytesIO(base64.b64decode(base['textures'][0]['source'].split(',', 1)[1]))).convert('RGBA')
-tex = Image.new('RGBA', (64 * PX, 128 * PX), (0, 0, 0, 0))
-tex.paste(src.resize((64 * PX, 64 * PX), Image.NEAREST), (0, 0))
+tex = Image.new('RGBA', (CW * PX, CH * PX), (0, 0, 0, 0))
+tex.paste(src.resize((64 * PX, 64 * PX), Image.NEAREST), (0, 0))  # the body template, at 1 texel per model pixel
 draw = ImageDraw.Draw(tex)
 COLORS = {('inner', 'out'): (205, 205, 210), ('inner', 'in'): (150, 150, 155),
           ('outer', 'out'): (170, 170, 178), ('outer', 'in'): (118, 118, 126)}
 strips, y = {}, 64
 for layer in ('inner', 'outer'):
-    h = max(pp['length'] for pp in panels if pp['layer'] == layer)
+    h = max(pp['length'] for pp in panels if pp['layer'] == layer) * VS
     for side in ('out', 'in'):
         x = 0
         for part in ('rest', 'front', 'back'):
@@ -63,9 +65,9 @@ for layer in ('inner', 'outer'):
                 u = (x + k * SLICE) * PX
                 draw.line([u, y * PX, u, (y + h) * PX - 1], fill=tuple(c - 25 for c in col[:3]) + (255,))
             x += w + 1
-        assert x <= 65, (layer, side, x)
+        assert x <= CW + 1, (layer, side, x)
         y += h + 1
-assert y <= 128
+assert y <= CH, y
 
 groups, elements = base['groups'], base['elements']
 
@@ -91,7 +93,7 @@ def panel(pp):
     for side, face in (('out', 'north'), ('in', 'south')):
         u0, v0 = strips[(pp['layer'], pp['part'], side)]
         u = u0 + cursor.get(key, 0.0)
-        faces[face] = {'uv': [u, v0, u + SLICE, v0 + L] if side == 'out' else [u + SLICE, v0, u, v0 + L], 'texture': 0}
+        faces[face] = {'uv': [u, v0, u + SLICE, v0 + L * VS] if side == 'out' else [u + SLICE, v0, u, v0 + L * VS], 'texture': 0}
     cursor[key] = cursor.get(key, 0.0) + SLICE
     e = {'name': f"{pp['layer']}_{pp['part']}_{pp['i']}", 'box_uv': False, 'render_order': 'default', 'locked': False,
          'export': True, 'allow_mirror_modeling': True, 'from': [round(v, 4) for v in frm], 'to': [round(v, 4) for v in to],
@@ -126,9 +128,9 @@ assert place(base['outliner'])
 
 buf = io.BytesIO(); tex.save(buf, 'PNG')
 t = base['textures'][0]
-t.update({'name': 'skirt_module.png', 'width': 64 * PX, 'height': 128 * PX, 'uv_width': 64, 'uv_height': 128,
+t.update({'name': 'skirt_module.png', 'width': CW * PX, 'height': CH * PX, 'uv_width': CW, 'uv_height': CH,
           'source': 'data:image/png;base64,' + base64.b64encode(buf.getvalue()).decode()})
-base['resolution'] = {'width': 64, 'height': 128}
+base['resolution'] = {'width': CW, 'height': CH}
 base['name'] = 'skirt_module_girl'
 json.dump(base, open(out_path, 'w'))
 print({k: len(v) for k, v in children.items()}, 'strip rows end at', y)
