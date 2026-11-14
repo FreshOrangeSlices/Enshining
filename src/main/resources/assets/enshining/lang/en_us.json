@@ -23,5 +23,12 @@
   "enshining.menu.level": "Lv %s",
   "enshining.menu.hp": "HP %s/%s",
   "enshining.menu.atk": "ATK %s",
-  "enshining.menu.def": "DEF %s"
+  "enshining.menu.def": "DEF %s",
+  "enshining.menu.tune": "Tune camera: %s",
+  "enshining.menu.tune.full": "Full",
+  "enshining.menu.tune.weapon": "Weapon",
+  "enshining.menu.tune.armor": "Armor",
+  "enshining.menu.tune.zoom": "Zoom: %s",
+  "enshining.menu.tune.height": "Height: %s",
+  "enshining.menu.tune.turn": "Turn: %s°"
 }

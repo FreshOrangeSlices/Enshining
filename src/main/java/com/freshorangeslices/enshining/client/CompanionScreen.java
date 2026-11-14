@@ -43,6 +43,16 @@ public class CompanionScreen extends AbstractContainerScreen<CompanionMenu> {
 
 	private enum Focus { FULL, WEAPON, ARMOR }
 
+	/** Camera per focus: pixels per block, the body height (blocks) centred in the frame, and turn (degrees). */
+	private static final float[] SCALE = {61.3F, 125.0F, 125.0F};
+	private static final float[] AIM = {1.0F, 1.05F, 1.35F};
+	private static final float[] TURN = {0.0F, 0.0F, 0.0F};
+
+	// Tuning panel (beside the menu): lock a pose and set its camera by hand, to read off the numbers.
+	@Nullable
+	private Focus tuning;
+	private float tuneScale, tuneAim, tuneTurn;
+
 	@Nullable
 	private CompanionEntity portrait;
 	private Focus focus = Focus.FULL;
@@ -74,6 +84,65 @@ public class CompanionScreen extends AbstractContainerScreen<CompanionMenu> {
 			}
 		}
 		aimY = aimYO = 1.0F;
+		addTuningPanel();
+	}
+
+	private void addTuningPanel() {
+		int w = 112;
+		int tx = leftPos + imageWidth + 6 + w <= width ? leftPos + imageWidth + 6 : Math.max(2, leftPos - w - 6);
+		int ty = topPos + 8;
+		addRenderableWidget(net.minecraft.client.gui.components.Button.builder(tuningLabel(), b -> {
+			tuning = tuning == null ? Focus.FULL : tuning == Focus.ARMOR ? null : Focus.values()[tuning.ordinal() + 1];
+			if (tuning != null) {
+				tuneScale = SCALE[tuning.ordinal()];
+				tuneAim = AIM[tuning.ordinal()];
+				tuneTurn = TURN[tuning.ordinal()];
+			}
+			rebuildWidgets();
+		}).bounds(tx, ty, w, 18).build());
+		if (tuning == null) {
+			return;
+		}
+		addRenderableWidget(new Tune(tx, ty + 22, w, 20, 20, 260, () -> tuneScale, v -> tuneScale = v, "enshining.menu.tune.zoom", "%.0f"));
+		addRenderableWidget(new Tune(tx, ty + 44, w, 20, -0.5F, 2.5F, () -> tuneAim, v -> tuneAim = v, "enshining.menu.tune.height", "%.2f"));
+		addRenderableWidget(new Tune(tx, ty + 66, w, 20, -180, 180, () -> tuneTurn, v -> tuneTurn = v, "enshining.menu.tune.turn", "%.0f"));
+	}
+
+	private Component tuningLabel() {
+		return Component.translatable("enshining.menu.tune", Component.translatable(tuning == null ? "enshining.menu.off"
+				: "enshining.menu.tune." + tuning.name().toLowerCase()));
+	}
+
+	/** A slider over [min, max] that shows its value. */
+	private static class Tune extends net.minecraft.client.gui.components.AbstractSliderButton {
+		private final float min, max;
+		private final java.util.function.Consumer<Float> set;
+		private final String key, format;
+
+		Tune(int x, int y, int w, int h, float min, float max, java.util.function.Supplier<Float> get,
+				java.util.function.Consumer<Float> set, String key, String format) {
+			super(x, y, w, h, Component.empty(), (get.get() - min) / (max - min));
+			this.min = min;
+			this.max = max;
+			this.set = set;
+			this.key = key;
+			this.format = format;
+			updateMessage();
+		}
+
+		private float current() {
+			return (float) (min + value * (max - min));
+		}
+
+		@Override
+		protected void updateMessage() {
+			setMessage(Component.translatable(key, String.format(java.util.Locale.ROOT, format, current())));
+		}
+
+		@Override
+		protected void applyValue() {
+			set.accept(current());
+		}
 	}
 
 	// ---- Poses and camera -------------------------------------------------------------------------------------
@@ -113,7 +182,9 @@ public class CompanionScreen extends AbstractContainerScreen<CompanionMenu> {
 		}
 		int hoveredIndex = hoveredSlot == null ? -1 : menu.slots.indexOf(hoveredSlot);
 		Focus hovered = hoveredIndex < 0 || hoveredIndex > 4 ? null : hoveredIndex == 4 ? Focus.WEAPON : Focus.ARMOR;
-		if (hovered != null) {
+		if (tuning != null) {
+			focus = tuning; // locked while tuning
+		} else if (hovered != null) {
 			focus = hovered;
 			focusHold = Math.max(focusHold, 10);
 		} else if (focusHold > 0 && --focusHold == 0) {
@@ -130,11 +201,7 @@ public class CompanionScreen extends AbstractContainerScreen<CompanionMenu> {
 		zoomO = zoom;
 		aimYO = aimY;
 		float targetZoom = focus == Focus.FULL ? 0.0F : 1.0F;
-		float targetAim = switch (focus) {
-			case WEAPON -> 1.05F; // hands and blade
-			case ARMOR -> 1.35F;  // chest and shoulders
-			default -> 1.0F;      // middle of her body
-		};
+		float targetAim = AIM[focus.ordinal()]; // full: middle of her body; weapon: hands and blade; armor: chest
 		zoom += (targetZoom - zoom) * 0.25F;
 		aimY += (targetAim - aimY) * 0.25F;
 	}
@@ -178,7 +245,14 @@ public class CompanionScreen extends AbstractContainerScreen<CompanionMenu> {
 		float aim = Mth.lerp(partialTick, aimYO, aimY);
 		float eased = z * z * (3 - 2 * z);
 		int boxH = PY1 - PY0;
-		float scale = Mth.lerp(eased, boxH / 2.35F, boxH / 1.15F);   // pixels per block: full body -> close-up
+		int to = focus.ordinal();
+		float scale = Mth.lerp(eased, SCALE[0], SCALE[to == 0 ? 1 : to]);   // pixels per block: full body -> close-up
+		float turn = Mth.lerp(eased, TURN[0], TURN[to]);
+		if (tuning != null) {
+			scale = tuneScale;
+			aim = tuneAim;
+			turn = tuneTurn;
+		}
 		int cx = x + (PX0 + PX1) / 2;
 		int feetY = (int) (y + PY0 + boxH / 2.0F + aim * scale);         // so the aimed height sits mid-box
 		float lookX = (cx - mouseX) / 40.0F, lookY = (y + PY0 + boxH / 3.0F - mouseY) / 40.0F;
@@ -186,7 +260,7 @@ public class CompanionScreen extends AbstractContainerScreen<CompanionMenu> {
 		Quaternionf pose = new Quaternionf().rotateZ((float) Math.PI);
 		Quaternionf tilt = new Quaternionf().rotateX(Mth.clamp(lookY, -1, 1) * 8.0F * Mth.DEG_TO_RAD);
 		pose.mul(tilt);
-		float yaw = 180.0F + 18.0F; // a slight three-quarter turn
+		float yaw = 180.0F + turn; // 0 = facing straight out of the screen
 		portrait.yBodyRot = yaw;
 		portrait.yBodyRotO = yaw;
 		portrait.setYRot(yaw + Mth.clamp(lookX, -1, 1) * 25.0F);
