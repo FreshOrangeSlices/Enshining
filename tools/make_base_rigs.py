@@ -92,6 +92,7 @@ def build(kind, p):
                 cube(f'{side}_forearm', [x0, neck - upper - fore, -2], [AW, fore, D], list(uv_lo), tuple(int(v * 0.85) for v in hue)),
                 group(f'{side}_hand', [c, hand_y, 0], hand_kids),
             ]),
+            group(f'{side}_arm_extras', [c, neck - 1.5, 0]),  # shoulder pieces etc.: move with the arm, hidden under a chestplate
             group(f'armor_{side}_arm', [c, neck - 1.5, 0],
                   [cube(f'armor_{side}_arm', [x0, neck - upper - fore, -2], [AW, upper + fore, D], visible=False)]),
         ])
