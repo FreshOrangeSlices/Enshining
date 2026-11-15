@@ -17,7 +17,7 @@ slim = len(sys.argv) > 3 and sys.argv[3] == 'slim'
 WAIST_Y = 12.8
 WAIST_A, WAIST_B, WAIST_N = 4.5, 2.7, 4.0     # rounded box: |x/a|^n + |z/b|^n = 1 holds the body's corners (+-4, +-2)
 FRONT_HEM_Y, BACK_HEM_Y = 7.0, 3.5            # front: 1 px above the knee (knee = 6); back: halfway down the shin
-WIDTH, OVERLAP = 2.0, 1.15                    # 2-px panels, 15% overlap
+WIDTH, OVERLAP = 2.0, float(__import__('os').environ.get('OVERLAP', 1.25))  # 2-px panels, 25% overlap (room to swing without gaps)
 TUCK_IN, TUCK_UP = 0.35, 0.5                  # the lower tier starts this far inside / above the upper tier's edge
 TIERS = [(21, 0.5), (16, 0.5)] if slim else [(24, 0.5), (20, 0.5)]   # (tilt degrees, share of the drop)
 FRILL = dict(length=1.8, extra_tilt=28, tuck_up=0.9, tuck_in=0.15)
