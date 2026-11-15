@@ -3,9 +3,17 @@
 Nothing here is built yet unless marked done. Order is roughly the order we'll do it in.
 
 ## Now: Noelle's rebuild (your side, in Blockbench)
-- Move to the shared slim-arm base rig (`docs/art/base_rigs`), redo her skin to match.
-- New skirt (`skirt` group, `skirt_front` / `skirt_back` follow her legs).
-- `flow_` bones for bangs and ribbon; eyes (`eyes_open` / `eyes_half` / `eyes_closed`); `weapon_back`.
+- Done: she's on the shared slim-arm girl rig (`docs/art/noelle/noelle_rig.bbmodel`, all her animations inside) with
+  her new skin, the A-line skirt, and her old pieces carried over as placeholders (headdress, roses, neck rose,
+  chest plate, pauldron, belt, bow with `flow_` tails), the claymore in hand and a copy hovering behind (`weapon_back`).
+- The skirt has its own texture (`noelle_skirt.png`, the project's second texture): paint it there.
+- Skirt motion (done, code): any cubes under a `skirt` group move as one connected ring. Each panel hinges where it
+  meets the waist (the highest panels), lower tiers and frill hang from the same spot. The front swings with the
+  forward leg and the back with the back leg (up to 20 degrees), fading out toward the sides; the whole ring
+  flares out up to 12 degrees when she spins (animation spins or turning). Keyframing just `skirt_front` /
+  `skirt_back` still moves them as solid blocks (seams can show): keep those keys small, or key `skirt`.
+- Still yours: paint the skirt; redo belt + shield, scarf (`chest_extras`, `flow_` tails), shoulder piece;
+  `flow_` bangs; eyes (`eyes_open` / `eyes_half` / `eyes_closed`); move `weapon_back_model` where you like it.
 - Animations: skill, jog, idle fidgets; later `weapon_aura` for the burst.
 
 ## Companion menu (right-click her)

@@ -319,6 +319,14 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 		return Mth.lerp(partialTick, lookBlendO, lookBlend);
 	}
 
+	/**
+	 * Client side, the skirt's motion this frame (radians), worked out by the model and drawn by the renderer: how far
+	 * the front swings with the forward leg, the back with the leg kicking back, and how far the whole ring flares
+	 * out when she spins. The rest is the spin tracker's memory between frames.
+	 */
+	public float skirtFront, skirtBack, skirtFlare;
+	public float skirtLastTime = -1.0F, skirtLastSpin, skirtLastYaw;
+
 	// ---- Menu portrait (a client-only copy shown in her menu) --------------------------------------------------
 
 	@Nullable

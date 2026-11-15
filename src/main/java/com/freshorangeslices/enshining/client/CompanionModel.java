@@ -86,49 +86,67 @@ public class CompanionModel<T extends CompanionEntity> extends DefaultedEntityGe
 		Set<String> animated = animatedBones(state);
 		vanillaLimbs(companion, state, animated);
 
-		// Cloth sway: skirt tiers and ribbon tails swing with each step, a beat behind the piece above, and breathe
-		// when still. Heavier (bigger, slower) when running or in the air. Each piece has a hard limit, and the whole
-		// chain added up stays small, so the skirt can never flip up.
+		// The whole skirt sways a little with each step and breathes when still, heavier when running or in the air
+		// (where it trails back a little, never up). Hard limit, so it can never flip up.
 		float time = companion.tickCount + state.getPartialTick();
 		float swing = state.getLimbSwing();
 		float amount = Math.min(1.0F, state.getLimbSwingAmount());
 		boolean running = companion.isSprinting();
 		boolean airborne = !companion.onGround() && !companion.isInWater();
 		float heavy = running ? 1.6F : 1.0F;
-		// In the air the skirt trails back a little (never up): a small lean, not a lift.
 		float trail = airborne ? 0.05F : running ? 0.03F : 0.0F;
 		sway("skirt", 0.0F, 0.03F * heavy, trail * 0.5F, 0.07F, swing, amount, time, animated);
-		// The front panel hangs from the same waist as the skirt, so it sways with it (else they cut through each other).
-		sway("SkirtFront", 0.0F, 0.03F * heavy, trail * 0.5F, 0.07F, swing, amount, time, animated);
-		sway("skirt_mid", 0.6F, 0.025F * heavy, trail * 0.3F, 0.05F, swing, amount, time, animated);
-		sway("skirt_hem", 1.2F, 0.025F * heavy, trail * 0.2F, 0.04F, swing, amount, time, animated);
-		sway("bow_tail_left", 0.4F, 0.06F * heavy, trail * 3.0F, 0.35F, swing, amount, time, animated);
-		sway("bow_tail_right", 0.9F, 0.06F * heavy, trail * 3.0F, 0.35F, swing, amount, time, animated);
-		skirtFollowsLegs();
+		skirtRing(companion, time);
 		flow(companion, state, time, swing, amount);
+		// Armor pieces of the rig stay hidden until armor drawing is in.
+		for (CoreGeoBone bone : getAnimationProcessor().getRegisteredBones()) {
+			if (bone.getName().startsWith("armor_")) {
+				bone.setHidden(true);
+			}
+		}
 	}
 
+	/** How much of a leg's swing the skirt takes, and the most the skirt flares out when she spins (radians, 12 deg). */
+	private static final float SKIRT_FOLLOW = 0.55F, SKIRT_MAX_FLARE = 0.21F;
+
 	/**
-	 * A skirt rebuilt with "skirt_front" / "skirt_back" bones: the front panel is pushed forward by whichever thigh
-	 * lifts forward, the back one by whichever kicks back (about half as far), so legs never poke through.
-	 * Rotation here reads like Blockbench: negative X = forward.
+	 * The skirt as one connected ring (drawn by {@link CompanionRenderer}): the front swings with whichever leg steps
+	 * forward, the back with whichever kicks back, fading smoothly around to nothing at the sides, and the whole ring
+	 * flares out (up to 12 degrees) when she spins, from a spin in her animation or her body turning.
+	 * A leg's X rotation moves its foot the same way the same X rotation moves a skirt column's hem, so a column
+	 * simply takes a share of that leg's rotation.
 	 */
-	private void skirtFollowsLegs() {
+	private void skirtRing(T companion, float time) {
 		CoreGeoBone right = getAnimationProcessor().getBone("right_leg");
 		CoreGeoBone left = getAnimationProcessor().getBone("left_leg");
-		if (right == null || left == null) {
-			return;
+		float r = right == null ? 0 : right.getRotX() - right.getInitialSnapshot().getRotX();
+		float l = left == null ? 0 : left.getRotX() - left.getInitialSnapshot().getRotX();
+		companion.skirtFront = SKIRT_FOLLOW * Math.max(0.0F, Math.max(r, l));   // positive X: foot (and hem) to the front
+		companion.skirtBack = SKIRT_FOLLOW * Math.min(0.0F, Math.min(r, l));    // negative X: foot (and hem) to the back
+
+		CoreGeoBone root = getAnimationProcessor().getBone("root");
+		CoreGeoBone body = getAnimationProcessor().getBone("body");
+		float spin = (root == null ? 0 : root.getRotY()) + (body == null ? 0 : body.getRotY());
+		float yaw = Mth.rotLerp(time - companion.tickCount, companion.yBodyRotO, companion.yBodyRot) * Mth.DEG_TO_RAD;
+		float dt = time - companion.skirtLastTime;
+		if (companion.skirtLastTime < 0 || dt > 4.0F || dt < 0) {
+			companion.skirtFlare = 0;
+		} else if (dt > 0) {
+			float turn = Math.abs(wrapRadians(spin - companion.skirtLastSpin)) + Math.abs(wrapRadians(yaw - companion.skirtLastYaw));
+			float speed = turn / dt;   // radians per tick
+			float want = SKIRT_MAX_FLARE * Mth.clamp((speed - 0.08F) / 0.35F, 0.0F, 1.0F);
+			float rate = want > companion.skirtFlare ? 0.6F : 0.2F;  // flares out fast, settles slowly
+			companion.skirtFlare += (want - companion.skirtFlare) * (1.0F - (float) Math.exp(-rate * dt));
 		}
-		float r = right.getRotX() - right.getInitialSnapshot().getRotX();
-		float l = left.getRotX() - left.getInitialSnapshot().getRotX();
-		CoreGeoBone front = getAnimationProcessor().getBone("skirt_front");
-		if (front != null) {
-			front.setRotX(front.getRotX() + 0.55F * Math.min(0.0F, Math.min(r, l)));
+		if (dt != 0) {
+			companion.skirtLastTime = time;
+			companion.skirtLastSpin = spin;
+			companion.skirtLastYaw = yaw;
 		}
-		CoreGeoBone back = getAnimationProcessor().getBone("skirt_back");
-		if (back != null) {
-			back.setRotX(back.getRotX() + 0.55F * Math.max(0.0F, Math.max(r, l)));
-		}
+	}
+
+	private static float wrapRadians(float angle) {
+		return angle - Mth.TWO_PI * Math.round(angle / Mth.TWO_PI);
 	}
 
 	/**

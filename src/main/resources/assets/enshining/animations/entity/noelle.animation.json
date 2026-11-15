@@ -1162,24 +1162,6 @@
 							"lerp_mode": "catmullrom"
 						}
 					}
-				},
-				"skirt": {
-					"scale": {
-						"0": [
-							1,
-							1,
-							1
-						]
-					}
-				},
-				"SkirtFront": {
-					"scale": {
-						"0": [
-							0,
-							0,
-							0
-						]
-					}
 				}
 			}
 		},
