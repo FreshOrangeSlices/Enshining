@@ -1,6 +1,8 @@
 """Fold the skirt's own texture (the project's second texture) into the first one, for Blockbench formats that show
 only one texture per model (the GeckoLib format does). Each block of the skirt's layout (a tier strip, the frill
 and lining patches) is moved as a whole into free space on the main texture, and its faces' UVs follow.
+The skirt's faces are the faces of every cube under the "skirt" group (Blockbench may have switched them to the
+first texture on saving; their UVs still point into the skirt's own texture).
 
 usage: merge_skirt_texture.py in.bbmodel out.bbmodel
 """
@@ -17,6 +19,23 @@ def image(t):
 
 
 main, skirt = image(m['textures'][0]), image(m['textures'][1])
+groups = {g['uuid']: g for g in m['groups']}
+in_skirt = set()
+
+
+def walk(node, inside):
+    inside = inside or groups[node['uuid']]['name'] == 'skirt'
+    for c in node['children']:
+        if isinstance(c, str):
+            if inside:
+                in_skirt.add(c)
+        else:
+            walk(c, inside)
+
+
+for n in m['outliner']:
+    if isinstance(n, dict):
+        walk(n, False)
 W, H = main.size
 taken = [[False] * W for _ in range(H)]
 
@@ -35,6 +54,8 @@ def box(uv):
 # Everything the main texture already uses: the skin area, every face reading it, and any painted pixel.
 take(0, 0, 64, 64)
 for e in m['elements']:
+    if e['uuid'] in in_skirt:
+        continue
     if e.get('box_uv'):
         w, h, d = (math.ceil(e['to'][i] - e['from'][i]) for i in range(3))
         u, v = e.get('uv_offset', [0, 0])
@@ -50,7 +71,7 @@ for y in range(H):
             taken[y][x] = True
 
 # The skirt's layout as blocks: face rectangles that share rows belong to one block.
-faces = [f for e in m['elements'] for f in e['faces'].values() if f.get('texture') == 1]
+faces = [f for e in m['elements'] if e['uuid'] in in_skirt for f in e['faces'].values() if f.get('texture') is not None]
 rects = sorted({box(f['uv']) for f in faces}, key=lambda r: r[1])
 blocks = []
 for r in rects:

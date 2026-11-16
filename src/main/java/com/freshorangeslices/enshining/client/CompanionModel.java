@@ -9,6 +9,7 @@ import com.freshorangeslices.enshining.Enshining;
 import com.freshorangeslices.enshining.core.CompanionEntity;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.util.Mth;
+import software.bernie.geckolib.cache.object.GeoBone;
 import software.bernie.geckolib.core.animatable.model.CoreGeoBone;
 import software.bernie.geckolib.core.animation.Animation;
 import software.bernie.geckolib.core.animation.AnimationProcessor;
@@ -97,6 +98,7 @@ public class CompanionModel<T extends CompanionEntity> extends DefaultedEntityGe
 		float trail = airborne ? 0.05F : running ? 0.03F : 0.0F;
 		sway("skirt", 0.0F, 0.03F * heavy, trail * 0.5F, 0.07F, swing, amount, time, animated);
 		skirtRing(companion, time, state.getPartialTick());
+		eyes(companion, time);
 		flow(companion, state, time, swing, amount);
 		// Armor pieces of the rig stay hidden until armor drawing is in.
 		for (CoreGeoBone bone : getAnimationProcessor().getRegisteredBones()) {
@@ -104,6 +106,63 @@ public class CompanionModel<T extends CompanionEntity> extends DefaultedEntityGe
 				bone.setHidden(true);
 			}
 		}
+	}
+
+	/**
+	 * Eyes: one of "eyes_open", "eyes_half" and "eyes_closed" shows at a time (each a face overlay with its own
+	 * pixels). She blinks once every 3 to 7 seconds, at different moments for different companions, and shuts her
+	 * eyes while hurt or dying. A blink skips "eyes_half" if nothing has been drawn in it yet.
+	 */
+	private void eyes(T companion, float time) {
+		CoreGeoBone open = getAnimationProcessor().getBone("eyes_open");
+		CoreGeoBone half = getAnimationProcessor().getBone("eyes_half");
+		CoreGeoBone closed = getAnimationProcessor().getBone("eyes_closed");
+		if (open == null && half == null && closed == null) {
+			return;
+		}
+		int look = blink(companion.getId(), time);   // 0 open, 1 half, 2 closed
+		if (companion.hurtTime > 0 || companion.deathTime > 0) {
+			look = 2;
+		}
+		if (look == 1 && !drawn(half)) {
+			look = 2;
+		}
+		if (open != null) {
+			open.setHidden(look != 0);
+		}
+		if (half != null) {
+			half.setHidden(look != 1);
+		}
+		if (closed != null) {
+			closed.setHidden(look != 2);
+		}
+	}
+
+	/** Where a blink is at: one blink per 90-tick stretch, starting somewhere in its first 60 ticks; 7 ticks long. */
+	private static int blink(int id, float time) {
+		int stretch = Mth.floor(time / 90.0F);
+		long seed = id * 341873128712L + stretch * 132897987541L;
+		float t = time - (stretch * 90.0F + Math.floorMod(seed ^ (seed >>> 17), 60));
+		if (t < 0 || t >= 7) {
+			return 0;
+		}
+		return t < 2 || t >= 5 ? 1 : 2;
+	}
+
+	/** Whether a bone, or anything under it, has cubes to show. */
+	private static boolean drawn(CoreGeoBone bone) {
+		if (!(bone instanceof GeoBone geo)) {
+			return false;
+		}
+		if (!geo.getCubes().isEmpty()) {
+			return true;
+		}
+		for (GeoBone child : geo.getChildBones()) {
+			if (drawn(child)) {
+				return true;
+			}
+		}
+		return false;
 	}
 
 	/** How much of a leg's swing the skirt takes, and the most the skirt flares out (radians, 12 degrees). */

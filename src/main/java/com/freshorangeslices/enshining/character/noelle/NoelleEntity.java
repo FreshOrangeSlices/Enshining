@@ -27,6 +27,7 @@ import net.minecraft.world.entity.monster.Enemy;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.Level;
+import software.bernie.geckolib.core.animation.Animation;
 import software.bernie.geckolib.core.animation.RawAnimation;
 
 /**
@@ -42,8 +43,9 @@ public class NoelleEntity extends CompanionEntity {
 
 	private static final UUID BURST_ATTACK = UUID.fromString("5e3b1c2a-7d41-4c55-9a0e-0e1a1f000101");
 	private static final EntityDataAccessor<Boolean> SWEEPING = SynchedEntityData.defineId(NoelleEntity.class, EntityDataSerializers.BOOLEAN);
-	private static final RawAnimation SKILL = RawAnimation.begin().thenPlay("animation.noelle.skill");
-	private static final RawAnimation BURST = RawAnimation.begin().thenPlay("animation.noelle.burst");
+	// Played once each, whatever the loop setting in Blockbench (the code decides how long they run).
+	private static final RawAnimation SKILL = RawAnimation.begin().then("animation.noelle.skill", Animation.LoopType.PLAY_ONCE);
+	private static final RawAnimation BURST = RawAnimation.begin().then("animation.noelle.burst", Animation.LoopType.PLAY_ONCE);
 	/**
 	 * Her four-hit combo, cut from one long Blockbench animation (lengths and impact times in seconds as animated):
 	 * re-timed by the user as separate pieces (hits 0.83 / 1.25 / 0.83 / 0.75s, ending 2.29s).
@@ -315,7 +317,12 @@ public class NoelleEntity extends CompanionEntity {
 
 	@Override
 	protected int skillAnimationTicks() {
-		return 26; // her skill animation is 1.3s
+		return 20; // her skill animation is 1s
+	}
+
+	@Override
+	protected int burstAnimationTicks() {
+		return 35; // her burst animation is 1.75s
 	}
 
 	@Override

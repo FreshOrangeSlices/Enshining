@@ -16,6 +16,10 @@ Nothing here is built yet unless marked done. Order is roughly the order we'll d
   when she spins or falls and bounces on landing, and lags behind turns and spins (lower panels more, up to 15
   degrees). All of it tested gap-free on the 2-px panels with 25% overlap. Keyframing just `skirt_front` /
   `skirt_back` still moves them as solid blocks (seams can show): keep those keys small, or key `skirt`.
+- Eyes: "eyes_open" / "eyes_half" / "eyes_closed" are face overlays (like Ganyu's in Migamigos), one shown at a
+  time; she blinks every 3-7 s and shuts them while hurt (code done). Keep the eyes off the skin's face itself.
+- Painting map: `docs/art/noelle/uv_guide.png` (labelled) and `uv_template.png` (guide layer), made by
+  `tools/make_uv_guide.py`. The chest plate (bust) has its own pixels on every face now.
 - Still yours: paint the skirt; redo belt + shield, scarf (`chest_extras`, `flow_` tails), shoulder piece;
   `flow_` bangs; eyes (`eyes_open` / `eyes_half` / `eyes_closed`); move `weapon_back_model` where you like it.
 - Animations: skill, jog, idle fidgets; later `weapon_aura` for the burst.
