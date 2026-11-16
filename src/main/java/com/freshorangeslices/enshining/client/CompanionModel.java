@@ -108,33 +108,51 @@ public class CompanionModel<T extends CompanionEntity> extends DefaultedEntityGe
 		}
 	}
 
+	private static final int OPEN = 0, HALF = 1, CLOSED = 2, HAPPY = 3;
+	private static final String[] EYES = {"eyes_open", "eyes_half", "eyes_closed", "eyes_happy"};
+
 	/**
-	 * Eyes: one of "eyes_open", "eyes_half" and "eyes_closed" shows at a time (each a face overlay with its own
-	 * pixels). She blinks once every 3 to 7 seconds, at different moments for different companions, and shuts her
-	 * eyes while hurt or dying. A blink skips "eyes_half" if nothing has been drawn in it yet.
+	 * Eyes: one of "eyes_open", "eyes_half", "eyes_closed" and "eyes_happy" shows at a time (each a face overlay
+	 * with its own pixels). Awake she blinks once every 3 to 7 seconds (different moments for different
+	 * companions). Smiling (happy eyes) for 3 seconds when she levels up, is given a gift or her menu is opened.
+	 * Sitting for half a minute she dozes (half-closed, now and then nodding off); after two minutes, or soon at
+	 * night, she sleeps (closed). Eyes shut while hurt. Any expression not drawn yet falls back to open.
 	 */
 	private void eyes(T companion, float time) {
-		CoreGeoBone open = getAnimationProcessor().getBone("eyes_open");
-		CoreGeoBone half = getAnimationProcessor().getBone("eyes_half");
-		CoreGeoBone closed = getAnimationProcessor().getBone("eyes_closed");
-		if (open == null && half == null && closed == null) {
+		CoreGeoBone[] bones = new CoreGeoBone[EYES.length];
+		boolean any = false;
+		for (int i = 0; i < EYES.length; i++) {
+			bones[i] = getAnimationProcessor().getBone(EYES[i]);
+			any |= bones[i] != null;
+		}
+		if (!any) {
 			return;
 		}
-		int look = blink(companion.getId(), time);   // 0 open, 1 half, 2 closed
+		long day = companion.level().getDayTime() % 24000L;
+		boolean night = day > 13000L && day < 23000L;
+		int sat = companion.sittingTicks;
+		int look;
 		if (companion.hurtTime > 0 || companion.deathTime > 0) {
-			look = 2;
+			look = CLOSED;
+		} else if (companion.tickCount < companion.eyesHappyUntil) {
+			look = HAPPY;
+		} else if (sat > 2400 || (night && sat > 200)) {
+			look = CLOSED;                                   // asleep
+		} else if (sat > 600) {
+			look = ((int) time + companion.getId() * 37) % 160 < 30 ? CLOSED : HALF;   // dozing, nodding off
+		} else {
+			look = blink(companion.getId(), time);
 		}
-		if (look == 1 && !drawn(half)) {
-			look = 2;
+		if (look == HALF && !drawn(bones[HALF])) {
+			look = sat > 600 ? OPEN : CLOSED;
 		}
-		if (open != null) {
-			open.setHidden(look != 0);
+		if (look != OPEN && !drawn(bones[look])) {
+			look = OPEN;
 		}
-		if (half != null) {
-			half.setHidden(look != 1);
-		}
-		if (closed != null) {
-			closed.setHidden(look != 2);
+		for (int i = 0; i < EYES.length; i++) {
+			if (bones[i] != null) {
+				bones[i].setHidden(i != look);
+			}
 		}
 	}
 

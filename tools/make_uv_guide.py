@@ -50,6 +50,7 @@ PARTS = [  # (key, label, colour, note)
     ('left_leg', 'Her left leg, upper', (72, 201, 176), 'skin left leg, rows 1-6'),
     ('left_shin', 'Her left leg, lower', (23, 165, 137), 'rows 7-12'),
     ('skirt', 'Skirt', (250, 140, 190), 'see the strip notes below'),
+    ('eyes', 'Eye expressions', (255, 214, 102), 'whole-face sheets in front of her face, one shown at a time'),
     ('weapon', 'Claymore', (149, 165, 166), 'in her hand and hovering behind her: same pixels'),
     ('weapon_back', 'Claymore', (149, 165, 166), ''),
 ]
@@ -63,6 +64,9 @@ for uid, path in owner.items():
         continue
     hit = None
     for name in reversed(path):   # the innermost accessory group wins, else the body part
+        if name.startswith('eyes'):
+            hit = 'eyes'
+            break
         if name in ('skirt', 'weapon', 'weapon_back'):
             hit = name
             break
@@ -160,10 +164,19 @@ for part, letter, x0, y0, x1, y1, layer in faces:
     if part not in centers or a > centers[part][0]:
         centers[part] = (a, (box[0] + box[2]) / 2, (box[1] + box[3]) / 2)
 
+# eye expressions: name each sheet under its patch
+for e in m['elements']:
+    if part_of.get(e['uuid']) == 'eyes':
+        u0, v0, u1, v1 = e['faces']['north']['uv']
+        d.text((ox + (u0 + u1) / 2 * S, oy + max(v0, v1) * S + 2), e['name'].replace('eyes_', ''), fill=(120, 90, 0),
+               font=f_small, anchor='ma')
+
 # skirt strips: say which way round they go
 sk = [r for r in faces if r[0] == 'skirt']
 strips = {}
 for part, letter, x0, y0, x1, y1, layer in sk:
+    if y1 - y0 <= 5:   # the frill and lining patches, not panel columns
+        continue
     key = round(y0)
     s = strips.setdefault(key, [x0, y0, x1, y1, 0])
     s[0], s[1], s[2], s[3], s[4] = min(s[0], x0), min(s[1], y0), max(s[2], x1), max(s[3], y1), s[4] + 1
@@ -233,10 +246,10 @@ for line in ['Two long strips, one 4-pixel column per panel (2 px wide, double',
     ly += 16
 for key, (x0, y0, x1, y1, n) in strips.items():
     if x1 - x0 > 40:
-        y = oy + y1 * S + 2
-        d.text((ox + x0 * S, y), 'back', fill=(150, 40, 90), font=f_small)
+        y = oy + y0 * S + 3
+        d.text((ox + x0 * S + 2, y), 'back', fill=(150, 40, 90), font=f_small)
         d.text((ox + (x0 + x1) / 2 * S, y), 'front', fill=(150, 40, 90), font=f_small, anchor='ma')
-        d.text((ox + x1 * S, y), 'back', fill=(150, 40, 90), font=f_small, anchor='ra')
+        d.text((ox + x1 * S - 2, y), 'back', fill=(150, 40, 90), font=f_small, anchor='ra')
 
 ly += 18
 d.text((lx, ly), 'Shared pixels', fill=(20, 20, 20), font=f_big)

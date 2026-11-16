@@ -327,6 +327,10 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 	 * lagging behind a turn or spin). The rest is the tracker's memory between frames.
 	 */
 	public float skirtFront, skirtBack;
+	/** Client side, for her eyes: smiling until this tick; how long she has been sitting. */
+	public int eyesHappyUntil, sittingTicks;
+	/** Entity event: she's happy (levelled up, her menu opened). Hearts (event 7) make her smile too. */
+	public static final byte EVENT_HAPPY = 100;
 	public final float[] skirtLean = new float[2], skirtFlare = new float[2], skirtTwist = new float[2];
 	public float skirtLastTime = -1.0F, skirtLastSpin, skirtLastYaw;
 	public double skirtLastX, skirtLastY, skirtLastZ;
@@ -466,6 +470,7 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 			float want = playingMove || inCombat() ? 0.0F : 1.0F;
 			lookBlend += Mth.clamp(want - lookBlend, -0.1F, 0.1F); // half a second to ease the look in or out
 			ticksSinceFight = playingMove || inCombat() ? 0 : ticksSinceFight + 1;
+			sittingTicks = isInSittingPose() ? sittingTicks + 1 : 0;
 			boolean back = showBackWeapon();
 			if (back != backWeaponShown) {
 				backWeaponShown = back;
@@ -643,6 +648,7 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 			if (level() instanceof ServerLevel server) {
 				server.sendParticles(element().dust(), getX(), getY() + 1, getZ(), 30, 0.5, 0.8, 0.5, 0);
 				playSound(SoundEvents.PLAYER_LEVELUP, 0.6F, 1.4F);
+				level().broadcastEntityEvent(this, EVENT_HAPPY);
 			}
 			if (getOwner() instanceof Player owner) {
 				owner.displayClientMessage(Component.translatable("enshining.companion.level_up", getDisplayName(), companionLevel()), true);
@@ -924,8 +930,19 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 		return InteractionResult.PASS;
 	}
 
+	@Override
+	public void handleEntityEvent(byte id) {
+		if (id == 7 || id == EVENT_HAPPY) {
+			eyesHappyUntil = tickCount + 60;   // three seconds of a smile
+		}
+		if (id != EVENT_HAPPY) {
+			super.handleEntityEvent(id);
+		}
+	}
+
 	/** Opens her menu (equipment, settings, status) for her owner. */
 	public void openMenu(ServerPlayer player) {
+		level().broadcastEntityEvent(this, EVENT_HAPPY);   // she smiles when you talk to her
 		NetworkHooks.openScreen(player, new SimpleMenuProvider((id, inventory, p) -> new CompanionMenu(id, inventory, this), getDisplayName()),
 				buf -> buf.writeVarInt(getId()));
 	}
