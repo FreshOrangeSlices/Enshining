@@ -6,11 +6,15 @@ Nothing here is built yet unless marked done. Order is roughly the order we'll d
 - Done: she's on the shared slim-arm girl rig (`docs/art/noelle/noelle_rig.bbmodel`, all her animations inside) with
   her new skin, the A-line skirt, and her old pieces carried over as placeholders (headdress, roses, neck rose,
   chest plate, pauldron, belt, bow with `flow_` tails), the claymore in hand and a copy hovering behind (`weapon_back`).
-- The skirt has its own texture (`noelle_skirt.png`, the project's second texture): paint it there.
+- The skirt's texture: Blockbench's GeckoLib format shows only one texture per model, so the skirt gets its own
+  area on her main texture (`tools/merge_skirt_texture.py` folds it in). The game also still accepts a separate
+  `NAME_skirt.png`.
 - Skirt motion (done, code): any cubes under a `skirt` group move as one connected ring. Each panel hinges where it
   meets the waist (the highest panels), lower tiers and frill hang from the same spot. The front swings with the
-  forward leg and the back with the back leg (up to 20 degrees), fading out toward the sides; the whole ring
-  flares out up to 12 degrees when she spins (animation spins or turning). Keyframing just `skirt_front` /
+  forward leg and the back with the back leg (up to 20 degrees), fading out toward the sides. Springs give it
+  weight: the hem trails behind her when she moves and swings past when she stops, flares out (up to 12 degrees)
+  when she spins or falls and bounces on landing, and lags behind turns and spins (lower panels more, up to 15
+  degrees). All of it tested gap-free on the 2-px panels with 25% overlap. Keyframing just `skirt_front` /
   `skirt_back` still moves them as solid blocks (seams can show): keep those keys small, or key `skirt`.
 - Still yours: paint the skirt; redo belt + shield, scarf (`chest_extras`, `flow_` tails), shoulder piece;
   `flow_` bangs; eyes (`eyes_open` / `eyes_half` / `eyes_closed`); move `weapon_back_model` where you like it.

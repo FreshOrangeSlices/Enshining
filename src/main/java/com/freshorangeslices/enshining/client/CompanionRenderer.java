@@ -50,6 +50,8 @@ public class CompanionRenderer<T extends CompanionEntity> extends GeoEntityRende
 	 * swing (none at the full 12-degree flare). Tested gap-free on the 2-px panel skirt with 25% overlap.
 	 */
 	private static final float SKIRT_MAX_SWING = 0.349F, SKIRT_SWING_PER_FLARE = 1.9F;
+	/** Most the hem twists behind a turn (15 degrees), less while it flares (7.5 at the full flare). */
+	private static final float SKIRT_MAX_TWIST = 0.26F, SKIRT_TWIST_PER_FLARE = 0.6F;
 	private boolean auraPass;
 	private boolean skirtPass;
 	private final Map<ResourceLocation, Optional<ResourceLocation>> skirtTextures = new HashMap<>();
@@ -64,10 +66,11 @@ public class CompanionRenderer<T extends CompanionEntity> extends GeoEntityRende
 			@Override
 			public void render(PoseStack poseStack, T companion, BakedGeoModel model, RenderType renderType,
 					MultiBufferSource bufferSource, VertexConsumer buffer, float partialTick, int packedLight, int packedOverlay) {
-				ResourceLocation texture = skirtTexture(companion);
-				if (texture == null || model.getBone(SKIRT).isEmpty()) {
+				if (ring == null) {
 					return;
 				}
+				ResourceLocation own = skirtTexture(companion);
+				ResourceLocation texture = own != null ? own : getTextureLocation(companion);
 				// Culled, so each panel shows its outside from outside and its lining from inside (no flicker).
 				RenderType skirt = RenderType.entityCutout(texture);
 				skirtPass = true;
@@ -185,9 +188,9 @@ public class CompanionRenderer<T extends CompanionEntity> extends GeoEntityRende
 		if (animatable != null && animatable.holdsSwappedWeapon() && isOwnWeaponModel(bone)) {
 			return;
 		}
+		// The skirt is drawn in its own pass only (culled, with its own texture if it has one).
 		boolean skirt = !auraPass && ring != null && inSkirt(bone);
-		// With its own texture, the skirt is drawn in its own pass only.
-		if (animatable != null && skirtTexture(animatable) != null && skirt != skirtPass) {
+		if (skirt != skirtPass) {
 			return;
 		}
 		if (skirt && animatable != null) {
@@ -207,16 +210,26 @@ public class CompanionRenderer<T extends CompanionEntity> extends GeoEntityRende
 		if (bone.isHidden()) {
 			return;
 		}
-		float flare = animatable.skirtFlare;
-		float limit = Math.max(0.0F, SKIRT_MAX_SWING - SKIRT_SWING_PER_FLARE * flare);
-		float front = Math.min(animatable.skirtFront, limit);
-		float back = Math.max(animatable.skirtBack, -limit);
+		float flare = animatable.skirtFlare[0];
+		float flaring = Math.max(0.0F, flare);
+		float limit = Math.max(0.0F, SKIRT_MAX_SWING - SKIRT_SWING_PER_FLARE * flaring);
+		float lean = animatable.skirtLean[0];
+		float front = Mth.clamp(animatable.skirtFront + lean, -limit, limit);
+		float back = Mth.clamp(animatable.skirtBack + lean, -limit, limit);
+		float twistLimit = Math.max(0.0F, SKIRT_MAX_TWIST - SKIRT_TWIST_PER_FLARE * flaring);
+		float twist = Mth.clamp(animatable.skirtTwist[0], -twistLimit, twistLimit);
 		Quaternionf turn = new Quaternionf();
 		for (GeoCube cube : bone.getCubes()) {
 			poseStack.pushPose();
 			float[] c = ring.columns.get(cube);
 			if (c != null) {
-				// Front columns take the forward leg's swing, back ones the back leg's, fading to none at the sides.
+				// The lower a panel hangs, the more it lags behind a turn (the waist itself stays put).
+				if (twist != 0 && c[7] > 0) {
+					poseStack.translate(ring.centerX, 0.0F, ring.centerZ);
+					poseStack.mulPose(Axis.YP.rotation(twist * c[7]));
+					poseStack.translate(-ring.centerX, 0.0F, -ring.centerZ);
+				}
+				// Front columns take the front swing, back ones the back swing, fading to none at the sides.
 				float swing = front * c[5] + back * c[6];
 				if (swing != 0 || flare != 0) {
 					poseStack.translate(c[0], c[1], c[2]);
@@ -237,11 +250,14 @@ public class CompanionRenderer<T extends CompanionEntity> extends GeoEntityRende
 	 */
 	static final class SkirtRing {
 		/**
-		 * Per cube: hinge x, y, z (in render units), the outward direction it faces dx, dz, and how much of the
+		 * Per cube: hinge x, y, z (in render units), the outward direction it faces dx, dz, how much of the
 		 * front / back swing it takes: (how far front or back it sits)^2, so the sides barely move and the swing
-		 * fades in gently there (where neighbouring panels would otherwise slide apart).
+		 * fades in gently there (where neighbouring panels would otherwise slide apart), and how much of the twist
+		 * (0 at the waist to 1 six pixels down).
 		 */
 		final Map<GeoCube, float[]> columns = new IdentityHashMap<>();
+		/** The middle of the waist (render units), which the hem twists around. */
+		float centerX, centerZ;
 
 		@Nullable
 		static SkirtRing of(@Nullable GeoBone skirt) {
@@ -286,6 +302,8 @@ public class CompanionRenderer<T extends CompanionEntity> extends GeoEntityRende
 				depth = Math.max(depth, Math.abs(t[2] - cz));
 			}
 			SkirtRing ring = new SkirtRing();
+			ring.centerX = cx;
+			ring.centerZ = cz;
 			for (int i = 0; i < cubes.size(); i++) {
 				float[] t = tops.get(i);
 				float[] hinge = onWaist(waist, angles, angle(t, cx, cz));
@@ -298,8 +316,9 @@ public class CompanionRenderer<T extends CompanionEntity> extends GeoEntityRende
 				rz /= len;
 				float[] facing = facing(cubes.get(i), rx, rz);
 				float side = Mth.clamp((hinge[1] - cz) / depth, -1.0F, 1.0F);
+				float hang = Mth.clamp((y - t[1]) / (6.0F / 16.0F), 0.0F, 1.0F);   // how far below the waist, 6 px = fully
 				ring.columns.put(cubes.get(i), new float[] {hinge[0], y, hinge[1], facing[0], facing[1],
-						side < 0 ? side * side : 0.0F, side > 0 ? side * side : 0.0F});
+						side < 0 ? side * side : 0.0F, side > 0 ? side * side : 0.0F, hang});
 			}
 			return ring;
 		}

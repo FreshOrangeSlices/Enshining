@@ -320,12 +320,16 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 	}
 
 	/**
-	 * Client side, the skirt's motion this frame (radians), worked out by the model and drawn by the renderer: how far
-	 * the front swings with the forward leg, the back with the leg kicking back, and how far the whole ring flares
-	 * out when she spins. The rest is the spin tracker's memory between frames.
+	 * Client side, the skirt's motion this frame (radians), worked out by the model and drawn by the renderer:
+	 * how far the front swings with the forward leg and the back with the leg kicking back, plus three springs
+	 * (angle, speed) that give it weight: the lean (the hem trails behind her when she moves, swings past and
+	 * settles when she stops), the flare (out when she spins or falls, bouncing on landing) and the twist (the hem
+	 * lagging behind a turn or spin). The rest is the tracker's memory between frames.
 	 */
-	public float skirtFront, skirtBack, skirtFlare;
+	public float skirtFront, skirtBack;
+	public final float[] skirtLean = new float[2], skirtFlare = new float[2], skirtTwist = new float[2];
 	public float skirtLastTime = -1.0F, skirtLastSpin, skirtLastYaw;
+	public double skirtLastX, skirtLastY, skirtLastZ;
 
 	// ---- Menu portrait (a client-only copy shown in her menu) --------------------------------------------------
 

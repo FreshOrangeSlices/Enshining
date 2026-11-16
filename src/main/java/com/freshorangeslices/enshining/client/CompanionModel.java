@@ -96,7 +96,7 @@ public class CompanionModel<T extends CompanionEntity> extends DefaultedEntityGe
 		float heavy = running ? 1.6F : 1.0F;
 		float trail = airborne ? 0.05F : running ? 0.03F : 0.0F;
 		sway("skirt", 0.0F, 0.03F * heavy, trail * 0.5F, 0.07F, swing, amount, time, animated);
-		skirtRing(companion, time);
+		skirtRing(companion, time, state.getPartialTick());
 		flow(companion, state, time, swing, amount);
 		// Armor pieces of the rig stay hidden until armor drawing is in.
 		for (CoreGeoBone bone : getAnimationProcessor().getRegisteredBones()) {
@@ -106,17 +106,18 @@ public class CompanionModel<T extends CompanionEntity> extends DefaultedEntityGe
 		}
 	}
 
-	/** How much of a leg's swing the skirt takes, and the most the skirt flares out when she spins (radians, 12 deg). */
+	/** How much of a leg's swing the skirt takes, and the most the skirt flares out (radians, 12 degrees). */
 	private static final float SKIRT_FOLLOW = 0.55F, SKIRT_MAX_FLARE = 0.21F;
 
 	/**
-	 * The skirt as one connected ring (drawn by {@link CompanionRenderer}): the front swings with whichever leg steps
-	 * forward, the back with whichever kicks back, fading smoothly around to nothing at the sides, and the whole ring
-	 * flares out (up to 12 degrees) when she spins, from a spin in her animation or her body turning.
-	 * A leg's X rotation moves its foot the same way the same X rotation moves a skirt column's hem, so a column
-	 * simply takes a share of that leg's rotation.
+	 * The skirt as one connected ring (drawn by {@link CompanionRenderer}).
+	 * Legs: the front swings with whichever leg steps forward, the back with whichever kicks back (a leg's X rotation
+	 * moves its foot the same way the same X rotation moves a skirt column's hem, so a column takes a share of it).
+	 * Weight, as springs that overshoot a little and settle: the hem trails behind her when she moves and swings
+	 * past when she stops; it flares out when she spins or falls and bounces when she lands; and it lags behind a
+	 * turn or a spin (from her body turning or from the animation itself), then catches up.
 	 */
-	private void skirtRing(T companion, float time) {
+	private void skirtRing(T companion, float time, float partialTick) {
 		CoreGeoBone right = getAnimationProcessor().getBone("right_leg");
 		CoreGeoBone left = getAnimationProcessor().getBone("left_leg");
 		float r = right == null ? 0 : right.getRotX() - right.getInitialSnapshot().getRotX();
@@ -127,22 +128,60 @@ public class CompanionModel<T extends CompanionEntity> extends DefaultedEntityGe
 		CoreGeoBone root = getAnimationProcessor().getBone("root");
 		CoreGeoBone body = getAnimationProcessor().getBone("body");
 		float spin = (root == null ? 0 : root.getRotY()) + (body == null ? 0 : body.getRotY());
-		float yaw = Mth.rotLerp(time - companion.tickCount, companion.yBodyRotO, companion.yBodyRot) * Mth.DEG_TO_RAD;
+		float yaw = Mth.rotLerp(partialTick, companion.yBodyRotO, companion.yBodyRot) * Mth.DEG_TO_RAD;
+		double x = Mth.lerp(partialTick, companion.xo, companion.getX());
+		double y = Mth.lerp(partialTick, companion.yo, companion.getY());
+		double z = Mth.lerp(partialTick, companion.zo, companion.getZ());
 		float dt = time - companion.skirtLastTime;
 		if (companion.skirtLastTime < 0 || dt > 4.0F || dt < 0) {
-			companion.skirtFlare = 0;
+			for (float[] s : new float[][] {companion.skirtLean, companion.skirtFlare, companion.skirtTwist}) {
+				s[0] = s[1] = 0;
+			}
 		} else if (dt > 0) {
-			float turn = Math.abs(wrapRadians(spin - companion.skirtLastSpin)) + Math.abs(wrapRadians(yaw - companion.skirtLastYaw));
-			float speed = turn / dt;   // radians per tick
-			float want = SKIRT_MAX_FLARE * Mth.clamp((speed - 0.08F) / 0.35F, 0.0F, 1.0F);
-			float rate = want > companion.skirtFlare ? 0.6F : 0.2F;  // flares out fast, settles slowly
-			companion.skirtFlare += (want - companion.skirtFlare) * (1.0F - (float) Math.exp(-rate * dt));
+			float vx = (float) (x - companion.skirtLastX) / dt;   // blocks per tick
+			float vy = (float) (y - companion.skirtLastY) / dt;
+			float vz = (float) (z - companion.skirtLastZ) / dt;
+			float forward = -vx * Mth.sin(yaw) + vz * Mth.cos(yaw);
+			float turn = wrapRadians(yaw - companion.skirtLastYaw) / dt;       // her body turning (radians per tick)
+			float spinRate = wrapRadians(spin - companion.skirtLastSpin) / dt;   // a spin in the animation
+			// Turning by +yaw turns the model the other way round its Y axis.
+			float modelSpin = spinRate - turn;
+			boolean grounded = companion.onGround() || companion.isInWater() || companion.isPassenger();
+
+			float lean = Mth.clamp(-0.8F * forward, -0.26F, 0.26F);   // moving forward: the hem trails back (+Z)
+			float spinSpeed = Math.abs(spinRate) + Math.abs(turn);
+			float flare = SKIRT_MAX_FLARE * Mth.clamp((spinSpeed - 0.08F) / 0.35F, 0.0F, 1.0F);
+			if (!grounded && vy < -0.08F) {   // falling: the air lifts it
+				flare = Math.max(flare, SKIRT_MAX_FLARE * Mth.clamp((-vy - 0.08F) / 0.35F, 0.0F, 1.0F));
+			}
+			float twist = Mth.clamp(-0.5F * modelSpin, -0.26F, 0.26F);   // the hem lags behind the spin
+
+			int steps = Math.max(1, Mth.ceil(dt / 0.25F));
+			float h = dt / steps;
+			for (int i = 0; i < steps; i++) {
+				spring(companion.skirtLean, lean, 0.45F, 0.35F, h);
+				spring(companion.skirtFlare, flare, 0.6F, 0.45F, h);
+				spring(companion.skirtTwist, twist, 0.4F, 0.3F, h);
+			}
+			companion.skirtLean[0] = Mth.clamp(companion.skirtLean[0], -0.3F, 0.3F);
+			companion.skirtFlare[0] = Mth.clamp(companion.skirtFlare[0], -0.03F, SKIRT_MAX_FLARE);
+			companion.skirtTwist[0] = Mth.clamp(companion.skirtTwist[0], -0.26F, 0.26F);
 		}
 		if (dt != 0) {
 			companion.skirtLastTime = time;
 			companion.skirtLastSpin = spin;
 			companion.skirtLastYaw = yaw;
+			companion.skirtLastX = x;
+			companion.skirtLastY = y;
+			companion.skirtLastZ = z;
 		}
+	}
+
+	/** One step of a damped spring {angle, speed} pulled toward a target (omega: stiffness per tick, zeta: damping). */
+	private static void spring(float[] s, float target, float omega, float zeta, float h) {
+		float accel = omega * omega * (target - s[0]) - 2.0F * zeta * omega * s[1];
+		s[1] += accel * h;
+		s[0] += s[1] * h;
 	}
 
 	private static float wrapRadians(float angle) {
