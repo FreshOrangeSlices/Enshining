@@ -22,7 +22,9 @@ Nothing here is built yet unless marked done. Order is roughly the order we'll d
   menu, winning a fight or you coming back after 10 s away (closed eyes if there's no happy drawing). Sitting:
   0-30 s drifting (dozing more and more, flicking awake), 30-90 s dozing (half, nodding off), then asleep
   (closed). Shut while hurt and in the menu's armor pose.
-- Menu poses done: `menu_weapon` (draws the claymore) and `menu_armor`; a pose set to play once holds its end.
+- Menu poses done: `menu_weapon` (draws the claymore) and `menu_armor`. Each plays its start once, then repeats
+  the rest (`tools/pose_loops.py`, easing back to the loop's start): armor loops from 0.42 s, weapon from 0.96 s.
+  Zooming back out switches her back to idle.
 - Painting map: `docs/art/noelle/uv_guide.png` (labelled) and `uv_template.png` (guide layer), made by
   `tools/make_uv_guide.py`. The chest plate (bust) has its own pixels on every face now.
 - Still yours: paint the skirt; redo belt + shield, scarf (`chest_extras`, `flow_` tails), shoulder piece;

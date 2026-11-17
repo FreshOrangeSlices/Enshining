@@ -157,6 +157,14 @@ public class CompanionScreen extends AbstractContainerScreen<CompanionMenu> {
 			if (baked == null || baked.getAnimation(wanted) == null) {
 				name = baked != null && baked.getAnimation(MENU_IDLE) != null ? MENU_IDLE : IDLE;
 			}
+			// A pose split into a start and a repeating rest (tools/pose_loops.py): the start once, then the rest.
+			if (baked != null && baked.getAnimation(name + "_loop") != null) {
+				RawAnimation pose = RawAnimation.begin();
+				if (baked.getAnimation(name + "_intro") != null) {
+					pose = pose.thenPlay(name + "_intro");
+				}
+				return pose.thenLoop(name + "_loop");
+			}
 			// A pose made to play once (like drawing the weapon) plays once and holds its last frame.
 			if (baked != null && baked.getAnimation(name) != null
 					&& baked.getAnimation(name).loopType() == software.bernie.geckolib.core.animation.Animation.LoopType.PLAY_ONCE) {
