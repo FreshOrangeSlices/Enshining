@@ -1111,7 +1111,7 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 	 * played once, then her plain idle again until the next one. Null: the plain idle.
 	 */
 	@Nullable
-	private RawAnimation idleFidget(AnimationState<?> state, boolean wasIdle) {
+	private RawAnimation idleFidget(software.bernie.geckolib.core.animation.AnimationState<?> state, boolean wasIdle) {
 		if (!wasIdle) {
 			fidget = null;
 			nextFidgetAt = tickCount + 160 + random.nextInt(200);
