@@ -18,9 +18,11 @@ Nothing here is built yet unless marked done. Order is roughly the order we'll d
   `skirt_back` still moves them as solid blocks (seams can show): keep those keys small, or key `skirt`.
 - Eyes: "eyes_open" / "eyes_half" / "eyes_closed" / "eyes_happy" are whole-face sheets 0.1 px in front of her
   face (like Ganyu's in Migamigos), one shown at a time, each with its own 8x8 patch (started as copies of her
-  face; `tools/add_eye_overlays.py`). Code: blinks every 3-7 s; happy for 3 s on level up, a gift or opening her
-  menu; sitting 30 s she dozes (half, nodding off), after 2 min (or at night) she sleeps (closed); shut while hurt.
-- Menu poses still to animate: `animation.companion.menu_weapon`, `animation.companion.menu_armor`.
+  face; `tools/add_eye_overlays.py`). Code: blinks every 3-7 s; happy for 3 s on level up, a gift, opening her
+  menu, winning a fight or you coming back after 10 s away (closed eyes if there's no happy drawing). Sitting:
+  0-30 s drifting (dozing more and more, flicking awake), 30-90 s dozing (half, nodding off), then asleep
+  (closed). Shut while hurt and in the menu's armor pose.
+- Menu poses done: `menu_weapon` (draws the claymore) and `menu_armor`; a pose set to play once holds its end.
 - Painting map: `docs/art/noelle/uv_guide.png` (labelled) and `uv_template.png` (guide layer), made by
   `tools/make_uv_guide.py`. The chest plate (bust) has its own pixels on every face now.
 - Still yours: paint the skirt; redo belt + shield, scarf (`chest_extras`, `flow_` tails), shoulder piece;

@@ -157,6 +157,11 @@ public class CompanionScreen extends AbstractContainerScreen<CompanionMenu> {
 			if (baked == null || baked.getAnimation(wanted) == null) {
 				name = baked != null && baked.getAnimation(MENU_IDLE) != null ? MENU_IDLE : IDLE;
 			}
+			// A pose made to play once (like drawing the weapon) plays once and holds its last frame.
+			if (baked != null && baked.getAnimation(name) != null
+					&& baked.getAnimation(name).loopType() == software.bernie.geckolib.core.animation.Animation.LoopType.PLAY_ONCE) {
+				return RawAnimation.begin().thenPlayAndHold(name);
+			}
 		}
 		return RawAnimation.begin().thenLoop(name);
 	}
@@ -194,7 +199,7 @@ public class CompanionScreen extends AbstractContainerScreen<CompanionMenu> {
 		switch (focus) {
 			// Her own weapon (or a swapped one) comes out; it's always there, so only the visibility toggle hides it.
 			case WEAPON -> portrait.setMenuPose(pose(MENU_WEAPON), real.setting(CompanionEntity.SHOW_WEAPON));
-			case ARMOR -> portrait.setMenuPose(pose(MENU_ARMOR), false);
+			case ARMOR -> portrait.setMenuPose(pose(MENU_ARMOR), false, true);   // eyes shut while she poses
 			default -> portrait.setMenuPose(pose(MENU_IDLE), false);
 		}
 

@@ -327,8 +327,13 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 	 * lagging behind a turn or spin). The rest is the tracker's memory between frames.
 	 */
 	public float skirtFront, skirtBack;
-	/** Client side, for her eyes: smiling until this tick; how long she has been sitting. */
-	public int eyesHappyUntil, sittingTicks;
+	/**
+	 * Client side, for her eyes: smiling until this tick; how long she has been sitting; how long her owner has
+	 * been far away (coming back after 10 seconds or more earns a smile).
+	 */
+	public int eyesHappyUntil, sittingTicks, ownerAwayTicks;
+	/** Client side, the menu portrait: eyes shut for this pose (her armor pose). */
+	public boolean menuEyesClosed;
 	/** Entity event: she's happy (levelled up, her menu opened). Hearts (event 7) make her smile too. */
 	public static final byte EVENT_HAPPY = 100;
 	public final float[] skirtLean = new float[2], skirtFlare = new float[2], skirtTwist = new float[2];
@@ -343,6 +348,12 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 
 	/** Client side, menu portrait copies only: the pose to play (null = normal behaviour) and whether her weapon is out. */
 	public void setMenuPose(@Nullable RawAnimation animation, boolean showWeapon) {
+		setMenuPose(animation, showWeapon, false);
+	}
+
+	/** The menu portrait's pose, whether her weapon is out, and whether her eyes are shut for it. */
+	public void setMenuPose(@Nullable RawAnimation animation, boolean showWeapon, boolean eyesClosed) {
+		menuEyesClosed = eyesClosed;
 		menuAnimation = animation;
 		menuShowsWeapon = showWeapon;
 	}
@@ -471,6 +482,18 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 			lookBlend += Mth.clamp(want - lookBlend, -0.1F, 0.1F); // half a second to ease the look in or out
 			ticksSinceFight = playingMove || inCombat() ? 0 : ticksSinceFight + 1;
 			sittingTicks = isInSittingPose() ? sittingTicks + 1 : 0;
+			LivingEntity owner = getOwner();
+			if (owner != null) {
+				double away = distanceToSqr(owner);
+				if (away > 12 * 12) {
+					ownerAwayTicks++;
+				} else if (away < 4 * 4) {
+					if (ownerAwayTicks >= 200) {
+						eyesHappyUntil = tickCount + 60;   // you're back
+					}
+					ownerAwayTicks = 0;
+				}
+			}
 			boolean back = showBackWeapon();
 			if (back != backWeaponShown) {
 				backWeaponShown = back;
