@@ -59,6 +59,8 @@ public class CompanionRenderer<T extends CompanionEntity> extends GeoEntityRende
 	private BakedGeoModel ringModel;
 	@Nullable
 	private SkirtRing ring;
+	/** The bones holding her claymore's cubes, in hand and hovering behind her (tracked for the sparkle). */
+	private final List<GeoBone> handBlade = new ArrayList<>(), backBlade = new ArrayList<>();
 
 	public CompanionRenderer(EntityRendererProvider.Context context, CompanionModel<T> model) {
 		super(context, model);
@@ -172,9 +174,88 @@ public class CompanionRenderer<T extends CompanionEntity> extends GeoEntityRende
 			ringModel = model;
 			ring = SkirtRing.of(model.getBone(SKIRT).orElse(null));
 			skirtTextures.clear();
+			handBlade.clear();
+			backBlade.clear();
+			model.getBone("weapon").ifPresent(b -> bladeBones(b, handBlade));
+			model.getBone("weapon_back").ifPresent(b -> bladeBones(b, backBlade));
 		}
 		super.actuallyRender(poseStack, companion, model, renderType, bufferSource, buffer, isReRender, partialTick, packedLight,
 				packedOverlay, red, green, blue, alpha);
+		// The sparkle, in the world only (not for the menu's portrait copy), from where the blade was just drawn.
+		if (!isReRender && companion.level().getEntity(companion.getId()) == companion) {
+			float frame = Minecraft.getInstance().getDeltaFrameTime();
+			if (companion.handWeaponIn > 0 && companion.handWeaponIn < 1) {
+				sparkle(companion, handBlade, frame, companion.handWeaponWanted);
+			}
+			if (companion.backWeaponIn > 0 && companion.backWeaponIn < 1) {
+				sparkle(companion, backBlade, frame, companion.backWeaponWanted);
+			}
+		}
+	}
+
+	private static void bladeBones(GeoBone bone, List<GeoBone> out) {
+		if (AURA.equals(bone.getName())) {
+			return;
+		}
+		if (!bone.getCubes().isEmpty()) {
+			bone.setTrackingMatrices(true);
+			out.add(bone);
+		}
+		for (GeoBone child : bone.getChildBones()) {
+			bladeBones(child, out);
+		}
+	}
+
+	/**
+	 * Soft lights over the blade while it materialises or dissolves: specks of her element's colour and little
+	 * sparks that drift down and fade. Spots are picked on the weapon's own cubes, wherever it is this frame.
+	 */
+	private static void sparkle(CompanionEntity companion, List<GeoBone> blade, float frameTicks, boolean appearing) {
+		if (blade.isEmpty()) {
+			return;
+		}
+		var random = companion.getRandom();
+		float budget = frameTicks * (appearing ? 6.0F : 8.0F);
+		int count = (int) budget + (random.nextFloat() < budget - (int) budget ? 1 : 0);
+		for (int i = 0; i < count; i++) {
+			GeoBone bone = blade.get(random.nextInt(blade.size()));
+			GeoCube cube = bone.getCubes().get(random.nextInt(bone.getCubes().size()));
+			float[] box = box(cube);
+			Vector3f p = new Vector3f(Mth.lerp(random.nextFloat(), box[0], box[3]), Mth.lerp(random.nextFloat(), box[1], box[4]),
+					Mth.lerp(random.nextFloat(), box[2], box[5]));
+			Vec3 pivot = cube.pivot();
+			Vec3 rot = cube.rotation();
+			Vector3f cp = new Vector3f((float) pivot.x() / 16, (float) pivot.y() / 16, (float) pivot.z() / 16);
+			new Quaternionf().rotationZYX((float) rot.z(), (float) rot.y(), (float) rot.x()).transform(p.sub(cp)).add(cp);
+			p.sub(bone.getPivotX() / 16, bone.getPivotY() / 16, bone.getPivotZ() / 16);
+			org.joml.Vector4f world = bone.getWorldSpaceMatrix().transform(new org.joml.Vector4f(p, 1));
+			if (random.nextInt(3) == 0) {
+				companion.level().addParticle(net.minecraft.core.particles.ParticleTypes.FIREWORK, world.x(), world.y(), world.z(),
+						(random.nextFloat() - 0.5F) * 0.02F, -0.005F - random.nextFloat() * 0.015F, (random.nextFloat() - 0.5F) * 0.02F);
+			} else {
+				companion.level().addParticle(companion.element().dust(), world.x(), world.y(), world.z(), 0, -0.01, 0);
+			}
+		}
+	}
+
+	/** A cube's box before its own rotation (render units): min x, y, z, max x, y, z. */
+	private static float[] box(GeoCube cube) {
+		float[] b = {Float.MAX_VALUE, Float.MAX_VALUE, Float.MAX_VALUE, -Float.MAX_VALUE, -Float.MAX_VALUE, -Float.MAX_VALUE};
+		for (GeoQuad quad : cube.quads()) {
+			if (quad == null) {
+				continue;
+			}
+			for (GeoVertex vertex : quad.vertices()) {
+				Vector3f v = vertex.position();
+				b[0] = Math.min(b[0], v.x());
+				b[1] = Math.min(b[1], v.y());
+				b[2] = Math.min(b[2], v.z());
+				b[3] = Math.max(b[3], v.x());
+				b[4] = Math.max(b[4], v.y());
+				b[5] = Math.max(b[5], v.z());
+			}
+		}
+		return b;
 	}
 
 	@Override

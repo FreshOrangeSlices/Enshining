@@ -208,15 +208,17 @@ public class CompanionScreen extends AbstractContainerScreen<CompanionMenu> {
 			// Her own weapon (or a swapped one) comes out; it's always there, so only the visibility toggle hides it.
 			case WEAPON -> portrait.setMenuPose(pose(MENU_WEAPON), real.setting(CompanionEntity.SHOW_WEAPON));
 			case ARMOR -> portrait.setMenuPose(pose(MENU_ARMOR), false, true);   // eyes shut while she poses
-			default -> portrait.setMenuPose(pose(MENU_IDLE), false);
+			default -> portrait.setMenuPose(pose(MENU_IDLE), false, false, 16);   // relaxes back over 0.8 s
 		}
 
 		zoomO = zoom;
 		aimYO = aimY;
 		float targetZoom = focus == Focus.FULL ? 0.0F : 1.0F;
 		float targetAim = AIM[focus.ordinal()]; // full: middle of her body; weapon: hands and blade; armor: chest
-		zoom += (targetZoom - zoom) * 0.25F;
-		aimY += (targetAim - aimY) * 0.25F;
+		// In quickly, back out slowly.
+		float rate = targetZoom < zoom ? 0.09F : 0.25F;
+		zoom += (targetZoom - zoom) * rate;
+		aimY += (targetAim - aimY) * rate;
 	}
 
 	// ---- Drawing ----------------------------------------------------------------------------------------------

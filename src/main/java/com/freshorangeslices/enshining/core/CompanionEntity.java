@@ -310,7 +310,13 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 
 	private boolean calmPose = true;   // client side: idle or walking (the back weapon may show); not run/jump/swim/sit
 	private int ticksSinceFight = 1000; // client side
-	private boolean backWeaponShown;   // client side, for the summon/unsummon sparkle
+	/**
+	 * Client side, her weapons appearing and vanishing (like Genshin's): how far each has materialised (0..1,
+	 * eased by the model per frame), whether it's wanted now, and the model's frame clock for that.
+	 */
+	public float handWeaponIn, backWeaponIn;
+	public boolean handWeaponWanted, backWeaponWanted;
+	public float weaponLastTime = -1.0F;
 	private float lookBlend = 1.0F;  // client side: how much the head looks at things (0 in a fight), eased per tick
 	private float lookBlendO = 1.0F;
 
@@ -344,6 +350,7 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 
 	@Nullable
 	private RawAnimation menuAnimation;
+	private int menuBlendTicks = 5;
 	private boolean menuShowsWeapon;
 
 	/** Client side, menu portrait copies only: the pose to play (null = normal behaviour) and whether her weapon is out. */
@@ -353,6 +360,12 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 
 	/** The menu portrait's pose, whether her weapon is out, and whether her eyes are shut for it. */
 	public void setMenuPose(@Nullable RawAnimation animation, boolean showWeapon, boolean eyesClosed) {
+		setMenuPose(animation, showWeapon, eyesClosed, 5);
+	}
+
+	/** ... and how many ticks she takes to blend into it. */
+	public void setMenuPose(@Nullable RawAnimation animation, boolean showWeapon, boolean eyesClosed, int blendTicks) {
+		menuBlendTicks = blendTicks;
 		menuEyesClosed = eyesClosed;
 		menuAnimation = animation;
 		menuShowsWeapon = showWeapon;
@@ -492,16 +505,6 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 						eyesHappyUntil = tickCount + 60;   // you're back
 					}
 					ownerAwayTicks = 0;
-				}
-			}
-			boolean back = showBackWeapon();
-			if (back != backWeaponShown) {
-				backWeaponShown = back;
-				// The claymore is summoned behind her (or dismissed) with a little sparkle.
-				Vec3 behind = position().add(Vec3.directionFromRotation(0, yBodyRot).scale(-0.45)).add(0, 1.15, 0);
-				for (int i = 0; i < 6; i++) {
-					level().addParticle(element().dust(), behind.x + (random.nextDouble() - 0.5) * 0.4,
-							behind.y + (random.nextDouble() - 0.5) * 0.8, behind.z + (random.nextDouble() - 0.5) * 0.4, 0, 0.02, 0);
 				}
 			}
 		}
@@ -1037,7 +1040,7 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 				// A menu portrait copy: plays whatever pose the menu asks for.
 				playingMove = false;
 				state.getController().setAnimationSpeed(1.0);
-				state.getController().setTransitionLength(5);
+				state.getController().setTransitionLength(menuBlendTicks);
 				return state.setAndContinue(menuAnimation);
 			}
 			int action = action();

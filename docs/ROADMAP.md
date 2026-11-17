@@ -24,7 +24,10 @@ Nothing here is built yet unless marked done. Order is roughly the order we'll d
   (closed). Shut while hurt and in the menu's armor pose.
 - Menu poses done: `menu_weapon` (draws the claymore) and `menu_armor`. Each plays its start once, then repeats
   the rest (`tools/pose_loops.py`, easing back to the loop's start): armor loops from 0.42 s, weapon from 0.96 s.
-  Zooming back out switches her back to idle.
+  Zooming back out is slower (in fast, out slow) and she relaxes back to idle over 0.8 s.
+- Weapons appear and vanish by magic (code): the claymore grows in over 0.15 s and shrinks away over 0.2 s, the
+  hovering one floats down into place, with specks of her element's colour and little falling sparks scattered
+  over the blade's own cubes while it does (in the world; not in the menu yet).
 - Painting map: `docs/art/noelle/uv_guide.png` (labelled) and `uv_template.png` (guide layer), made by
   `tools/make_uv_guide.py`. The chest plate (bust) has its own pixels on every face now.
 - Still yours: paint the skirt; redo belt + shield, scarf (`chest_extras`, `flow_` tails), shoulder piece;

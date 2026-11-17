@@ -69,22 +69,8 @@ public class CompanionModel<T extends CompanionEntity> extends DefaultedEntityGe
 			head.setRotX(baseX + animX + limitLook(lookX, animX, 0.7F));
 			head.setRotY(baseY + animY + limitLook(lookY, animY, 1.3F));
 		}
-		CoreGeoBone weapon = getAnimationProcessor().getBone("weapon");
-		if (weapon != null) {
-			// Out only while she's swinging, holding a hit's pose, or casting (like Genshin): her walk and run were
-			// made without the claymore, and carrying it through them drags the blade through the ground.
-			weapon.setHidden(!companion.showsWeaponInHand() || companion.holdsSwappedWeapon() || !companion.setting(CompanionEntity.SHOW_WEAPON));
-		}
-		// The claymore hovering behind her after a fight (a separate bone, if the model has one), bobbing gently.
-		CoreGeoBone back = getAnimationProcessor().getBone("weapon_back");
-		if (back != null) {
-			// With a swapped weapon the bone stays (the weapon is drawn at it); the renderer skips the claymore copy.
-			back.setHidden(!companion.showBackWeapon() || !companion.setting(CompanionEntity.SHOW_WEAPON));
-			float t = companion.tickCount + state.getPartialTick();
-			back.setPosY(back.getInitialSnapshot().getOffsetY() + (float) Math.sin(t * 0.08) * 0.5F);
-			back.setRotZ(back.getInitialSnapshot().getRotZ() + (float) Math.sin(t * 0.05) * 0.03F);
-		}
 		Set<String> animated = animatedBones(state);
+		weapons(companion, state, animated);
 		vanillaLimbs(companion, state, animated);
 
 		// The whole skirt sways a little with each step and breathes when still, heavier when running or in the air
@@ -106,6 +92,56 @@ public class CompanionModel<T extends CompanionEntity> extends DefaultedEntityGe
 				bone.setHidden(true);
 			}
 		}
+	}
+
+	/**
+	 * Her weapons appear and vanish by magic, like Genshin's: the claymore in her hand while she swings or casts
+	 * (her walk and run were made without it, and carrying it through them drags the blade through the ground),
+	 * and the one hovering behind her after a fight (if the model has "weapon_back"), which floats down into place
+	 * and bobs. Each grows in over 0.15 s and shrinks away over 0.2 s (unless the animation itself scales it);
+	 * the renderer scatters light over the blade while it does.
+	 */
+	private void weapons(T companion, AnimationState<T> state, Set<String> animated) {
+		float time = companion.tickCount + state.getPartialTick();
+		float dt = time - companion.weaponLastTime;
+		boolean snap = companion.weaponLastTime < 0 || dt < 0 || dt > 4.0F;
+		if (dt != 0) {
+			companion.weaponLastTime = time;
+		}
+		boolean shown = companion.setting(CompanionEntity.SHOW_WEAPON);
+		boolean hand = shown && companion.showsWeaponInHand() && !companion.holdsSwappedWeapon();
+		boolean back = shown && companion.showBackWeapon();
+		companion.handWeaponWanted = hand;
+		companion.backWeaponWanted = back;
+		companion.handWeaponIn = snap ? (hand ? 1 : 0) : Mth.approach(companion.handWeaponIn, hand ? 1 : 0, dt / (hand ? 3.0F : 4.0F));
+		companion.backWeaponIn = snap ? (back ? 1 : 0) : Mth.approach(companion.backWeaponIn, back ? 1 : 0, dt / (back ? 6.0F : 4.0F));
+
+		CoreGeoBone weapon = getAnimationProcessor().getBone("weapon");
+		if (weapon != null) {
+			weapon.setHidden(companion.handWeaponIn <= 0 || companion.holdsSwappedWeapon());
+			materialise(weapon, companion.handWeaponIn, animated.contains("weapon"));
+		}
+		CoreGeoBone backBone = getAnimationProcessor().getBone("weapon_back");
+		if (backBone != null) {
+			// With a swapped weapon the bone stays (the weapon is drawn at it); the renderer skips the claymore copy.
+			backBone.setHidden(companion.backWeaponIn <= 0);
+			float in = companion.backWeaponIn;
+			float drop = (1 - in) * (1 - in) * 4.0F;   // floats down the last few pixels into place
+			backBone.setPosY(backBone.getInitialSnapshot().getOffsetY() + (float) Math.sin(time * 0.08) * 0.5F + drop);
+			backBone.setRotZ(backBone.getInitialSnapshot().getRotZ() + (float) Math.sin(time * 0.05) * 0.03F);
+			materialise(backBone, in, animated.contains("weapon_back"));
+		}
+	}
+
+	/** Scales a weapon bone by how far it has materialised (eased), on top of the animation's own scale. */
+	private static void materialise(CoreGeoBone bone, float in, boolean animated) {
+		float s = in >= 1 ? 1 : in * in * (3 - 2 * in);
+		float x = animated ? bone.getScaleX() : bone.getInitialSnapshot().getScaleX();
+		float y = animated ? bone.getScaleY() : bone.getInitialSnapshot().getScaleY();
+		float z = animated ? bone.getScaleZ() : bone.getInitialSnapshot().getScaleZ();
+		bone.setScaleX(x * s);
+		bone.setScaleY(y * s);
+		bone.setScaleZ(z * s);
 	}
 
 	private static final int OPEN = 0, HALF = 1, CLOSED = 2, HAPPY = 3;
