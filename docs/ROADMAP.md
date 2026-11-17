@@ -30,6 +30,11 @@ Nothing here is built yet unless marked done. Order is roughly the order we'll d
   over the blade's own cubes while it does (in the world; not in the menu yet).
 - Painting map: `docs/art/noelle/uv_guide.png` (labelled) and `uv_template.png` (guide layer), made by
   `tools/make_uv_guide.py`. The chest plate (bust) has its own pixels on every face now.
+- Extra idles (code done): animations named `animation.companion.idle_<anything>` (or `animation.noelle.idle_...`)
+  play once now and then (every 8-18 s standing idle), a different one each time.
+- Glow (code done): bones named `glow_...` (and what's under them) render at full brightness, e.g. her Vision.
+- Armor visuals: cancelled (modded armor can't be matched); armor slots still give stats. The rig's armor_*
+  bones stay hidden.
 - Still yours: paint the skirt; redo belt + shield, scarf (`chest_extras`, `flow_` tails), shoulder piece;
   `flow_` bangs; eyes (`eyes_open` / `eyes_half` / `eyes_closed`); move `weapon_back_model` where you like it.
 - Animations: skill, jog, idle fidgets; later `weapon_aura` for the burst.

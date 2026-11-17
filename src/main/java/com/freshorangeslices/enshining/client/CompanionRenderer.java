@@ -147,6 +147,15 @@ public class CompanionRenderer<T extends CompanionEntity> extends GeoEntityRende
 		return false;
 	}
 
+	private static boolean glows(GeoBone bone) {
+		for (GeoBone b = bone; b != null; b = b.getParent()) {
+			if (b.getName().startsWith("glow_")) {
+				return true;
+			}
+		}
+		return false;
+	}
+
 	private static boolean inSkirt(GeoBone bone) {
 		for (GeoBone b = bone; b != null; b = b.getParent()) {
 			if (SKIRT.equals(b.getName())) {
@@ -273,6 +282,10 @@ public class CompanionRenderer<T extends CompanionEntity> extends GeoEntityRende
 		boolean skirt = !auraPass && ring != null && inSkirt(bone);
 		if (skirt != skirtPass) {
 			return;
+		}
+		// "glow_..." bones (and what's under them) shine at full brightness, like a Vision or a gem.
+		if (!auraPass && glows(bone)) {
+			packedLight = FULL_BRIGHT;
 		}
 		if (skirt && animatable != null) {
 			renderSkirtCubes(poseStack, bone, buffer, packedLight, packedOverlay, red, green, blue, alpha);

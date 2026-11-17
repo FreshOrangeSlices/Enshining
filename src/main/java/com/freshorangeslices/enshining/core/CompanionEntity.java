@@ -1076,6 +1076,8 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 			}
 			playingMove = false;
 			calmPose = false;
+			boolean wasIdle = idling;
+			idling = false;
 			if (isInSittingPose()) {
 				return state.setAndContinue(SIT);
 			}
@@ -1090,8 +1092,56 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 				return state.setAndContinue(isSprinting() ? RUN : WALK);
 			}
 			calmPose = true;
-			return state.setAndContinue(IDLE);
+			idling = true;
+			RawAnimation fidget = idleFidget(state, wasIdle);
+			return state.setAndContinue(fidget != null ? fidget : IDLE);
 		}));
+	}
+
+	// Client side: standing idle, now and then she plays one of her extra idles ("..._idle_<anything>"), once.
+	private boolean idling;
+	@Nullable
+	private RawAnimation fidget;
+	private String lastFidget = "";
+	private int nextFidgetAt;
+
+	/**
+	 * After 8 to 18 seconds of standing idle, one of the animations named "animation.companion.idle_..." or
+	 * "animation.NAME.idle_..." in her animation file (a different one from last time when there are several),
+	 * played once, then her plain idle again until the next one. Null: the plain idle.
+	 */
+	@Nullable
+	private RawAnimation idleFidget(AnimationState<?> state, boolean wasIdle) {
+		if (!wasIdle) {
+			fidget = null;
+			nextFidgetAt = tickCount + 160 + random.nextInt(200);
+		}
+		if (fidget != null) {
+			if (!state.isCurrentAnimation(fidget) || !state.getController().hasAnimationFinished()) {
+				return fidget;
+			}
+			fidget = null;
+			nextFidgetAt = tickCount + 160 + random.nextInt(200);
+		}
+		if (tickCount < nextFidgetAt) {
+			return null;
+		}
+		nextFidgetAt = tickCount + 160 + random.nextInt(200);
+		var file = new net.minecraft.resources.ResourceLocation(com.freshorangeslices.enshining.Enshining.MODID, "animations/entity/"
+				+ net.minecraftforge.registries.ForgeRegistries.ENTITY_TYPES.getKey(getType()).getPath() + ".animation.json");
+		var baked = software.bernie.geckolib.cache.GeckoLibCache.getBakedAnimations().get(file);
+		if (baked == null) {
+			return null;
+		}
+		java.util.List<String> extras = baked.animations().keySet().stream()
+				.filter(name -> name.matches("animation\\.[a-z0-9_]+\\.idle_.+")).sorted().toList();
+		if (extras.isEmpty()) {
+			return null;
+		}
+		java.util.List<String> fresh = extras.size() > 1 ? extras.stream().filter(n -> !n.equals(lastFidget)).toList() : extras;
+		lastFidget = fresh.get(random.nextInt(fresh.size()));
+		fidget = RawAnimation.begin().thenPlay(lastFidget);
+		return fidget;
 	}
 
 	/**
