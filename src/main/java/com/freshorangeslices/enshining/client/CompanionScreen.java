@@ -289,21 +289,20 @@ public class CompanionScreen extends AbstractContainerScreen<CompanionMenu> {
 		g.disableScissor();
 	}
 
-	/** The bottom bar: armor (eye), weapon (sword), behavior (colored dot) on the left; skill and burst on the right. */
+	/** The bottom bar: weapon (sword), behavior (colored dot), mode on the left; skill and burst on the right. */
 	private void drawBar(GuiGraphics g, int x, int y, @Nullable CompanionEntity c, int mouseX, int mouseY) {
 		if (c == null) {
 			return;
 		}
 		int by = y + BAR_Y;
-		Icon.EYE.draw(g, x + PX0, by, c.setting(CompanionEntity.SHOW_ARMOR));
-		Icon.SWORD.draw(g, x + PX0 + 20, by, c.setting(CompanionEntity.SHOW_WEAPON));
+		Icon.SWORD.draw(g, x + PX0, by, c.setting(CompanionEntity.SHOW_WEAPON));
 		int dot = switch (c.behavior()) {
 			case PASSIVE -> 0xFF4FC86A;
 			case WAIT_FOR_LEADER -> 0xFFE8C84A;
 			default -> 0xFFE0504A;
 		};
-		disc(g, x + PX0 + 40 + 7, by + 7, 5, dot);
-		Icon.MODE.draw(g, x + PX0 + 60, by, true);
+		disc(g, x + PX0 + 20 + 7, by + 7, 5, dot);
+		Icon.MODE.draw(g, x + PX0 + 40, by, true);
 		Icon.SKILL.draw(g, x + PX1 - 34, by, c.setting(CompanionEntity.SKILL_ON));
 		Icon.BURST.draw(g, x + PX1 - 14, by, c.setting(CompanionEntity.BURST_ON));
 	}
@@ -361,8 +360,8 @@ public class CompanionScreen extends AbstractContainerScreen<CompanionMenu> {
 		if (my < BAR_Y || my >= BAR_Y + ICON) {
 			return -1;
 		}
-		int[][] spots = {{PX0, CompanionMenu.BUTTON_ARMOR}, {PX0 + 20, CompanionMenu.BUTTON_WEAPON}, {PX0 + 40, CompanionMenu.BUTTON_BEHAVIOR},
-				{PX0 + 60, CompanionMenu.BUTTON_MODE}, {PX1 - 34, CompanionMenu.BUTTON_SKILL}, {PX1 - 14, CompanionMenu.BUTTON_BURST}};
+		int[][] spots = {{PX0, CompanionMenu.BUTTON_WEAPON}, {PX0 + 20, CompanionMenu.BUTTON_BEHAVIOR},
+				{PX0 + 40, CompanionMenu.BUTTON_MODE}, {PX1 - 34, CompanionMenu.BUTTON_SKILL}, {PX1 - 14, CompanionMenu.BUTTON_BURST}};
 		for (int[] s : spots) {
 			if (mx >= s[0] && mx < s[0] + ICON) {
 				return s[1];
@@ -391,7 +390,6 @@ public class CompanionScreen extends AbstractContainerScreen<CompanionMenu> {
 			return null;
 		}
 		return switch (id) {
-			case CompanionMenu.BUTTON_ARMOR -> onOff("enshining.menu.armor", c.setting(CompanionEntity.SHOW_ARMOR));
 			case CompanionMenu.BUTTON_WEAPON -> onOff("enshining.menu.weapon", c.setting(CompanionEntity.SHOW_WEAPON));
 			case CompanionMenu.BUTTON_BEHAVIOR -> Component.translatable("enshining.behavior." + c.behavior().name().toLowerCase());
 			case CompanionMenu.BUTTON_MODE -> Component.translatable("enshining.menu.mode",
@@ -439,7 +437,6 @@ public class CompanionScreen extends AbstractContainerScreen<CompanionMenu> {
 
 	/** Tiny pixel icons, drawn from 7x7 masks at 2x; dimmed when off. */
 	private enum Icon {
-		EYE(".......", "..###..", ".#...#.", "#..#..#", ".#...#.", "..###..", "......."),
 		SWORD("......#", ".....#.", "....#..", "#..#...", ".##....", ".##....", "#..#..."),
 		MODE("...#...", "..###..", ".#####.", "...#...", "...#...", "...#...", "..###.."),
 		SKILL("...#...", "..###..", ".#####.", "#######", ".#####.", "..###..", "...#..."),

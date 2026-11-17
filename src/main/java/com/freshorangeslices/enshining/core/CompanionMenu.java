@@ -140,7 +140,6 @@ public class CompanionMenu extends AbstractContainerMenu {
 		switch (id) {
 			case BUTTON_MODE -> companion.setMode(companion.mode().next());
 			case BUTTON_BEHAVIOR -> companion.setBehavior(companion.behavior().next());
-			case BUTTON_ARMOR -> companion.toggleSetting(CompanionEntity.SHOW_ARMOR);
 			case BUTTON_WEAPON -> companion.toggleSetting(CompanionEntity.SHOW_WEAPON);
 			case BUTTON_SKILL -> companion.toggleSetting(CompanionEntity.SKILL_ON);
 			case BUTTON_BURST -> companion.toggleSetting(CompanionEntity.BURST_ON);

@@ -34,7 +34,12 @@ Nothing here is built yet unless marked done. Order is roughly the order we'll d
   play once now and then (every 8-18 s standing idle), a different one each time.
 - Glow (code done): bones named `glow_...` (and what's under them) render at full brightness, e.g. her Vision.
 - Armor visuals: cancelled (modded armor can't be matched); armor slots still give stats. The rig's armor_*
-  bones stay hidden.
+  bones stay hidden; the menu's armor (eye) button is gone.
+- Starters to reshape (v5): burst glow in `weapon_aura` (`tools/add_burst_aura.py`: the claymore at 1.3x, soft
+  gold see-through) and a diagonal chain belt in `chain_belt` (`tools/make_chain_belt.py`: strap round the back,
+  chain across the front, joint rings); the old `belt` is switched off from export.
+- Mark 1 = this model, finished as is. Mark 2 later: a more detailed "voxel character" style (see the reference
+  the user sent: chunky layered clothes, big sleeves/hat, hair in locks, double-detail shading).
 - Still yours: paint the skirt; redo belt + shield, scarf (`chest_extras`, `flow_` tails), shoulder piece;
   `flow_` bangs; eyes (`eyes_open` / `eyes_half` / `eyes_closed`); move `weapon_back_model` where you like it.
 - Animations: skill, jog, idle fidgets; later `weapon_aura` for the burst.

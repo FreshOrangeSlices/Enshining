@@ -52,6 +52,7 @@ PARTS = [  # (key, label, colour, note)
     ('skirt', 'Skirt', (250, 140, 190), 'see the strip notes below'),
     ('eyes', 'Eye expressions', (255, 214, 102), 'whole-face sheets in front of her face, one shown at a time'),
     ('weapon', 'Claymore', (149, 165, 166), 'in her hand and hovering behind her: same pixels'),
+    ('aura', 'Burst glow', (255, 236, 150), 'the see-through overlay on the claymore during her burst'),
     ('weapon_back', 'Claymore', (149, 165, 166), ''),
 ]
 EXTRA = [(170, 110, 80), (205, 97, 85), (125, 206, 160), (133, 193, 233), (187, 143, 206), (230, 126, 34),
@@ -66,6 +67,9 @@ for uid, path in owner.items():
     for name in reversed(path):   # the innermost accessory group wins, else the body part
         if name.startswith('eyes'):
             hit = 'eyes'
+            break
+        if name == 'weapon_aura':
+            hit = 'aura'
             break
         if name in ('skirt', 'weapon', 'weapon_back'):
             hit = name
