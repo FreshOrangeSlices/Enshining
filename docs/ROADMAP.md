@@ -78,6 +78,7 @@ Nothing here is built yet unless marked done. Order is roughly the order we'll d
   0.42 s, `menu_weapon` from 0.96 s (`tools/pose_loops.py` cuts them there); the jump is likely the cut point.
 - Charged attack: animate `animation.noelle.charged`; I switch it on with its length and hit moments.
 - Paint the belt bow's new 3x spot and the mini shield's 5x7 faces (grey placeholder now).
+- Given weapons working with her animations (code, mine): see Armor and weapons below.
 - In-game check after the latest build: lighting softness (now 0.25), skill/burst timing, bows, blinks, menu linger.
 
 ## Companion menu (right-click her)
@@ -102,6 +103,9 @@ Nothing here is built yet unless marked done. Order is roughly the order we'll d
   leggings: skirt + waist extras; boots: foot extras).
 - Weapon swap: a held weapon REPLACES the claymore's damage (+ her level bonus); enchantments apply.
   Skill and burst work with any weapon; the burst keeps its magic overlay and doubled reach.
+- To do (code): a weapon you give her has to work with her animations too, not just her claymore: held in her
+  hand through every attack, skill, burst and menu pose, appearing and vanishing by magic with the sparkle, and
+  hovering on her back when she's not fighting.
 
 ## Damage
 - Base claymore damage 3.5 (1.5 combos kill a zombie). Level bonus +0.25 attack per level.
