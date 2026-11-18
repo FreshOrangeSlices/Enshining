@@ -73,13 +73,24 @@ Nothing here is built yet unless marked done. Order is roughly the order we'll d
   `flow_` bangs; eyes (`eyes_open` / `eyes_half` / `eyes_closed`); move `weapon_back_model` where you like it.
 - Animations: skill, jog, idle fidgets; later `weapon_aura` for the burst.
 
+### Next game update (ON HOLD until the user's new animations are done; don't push game changes before)
+Tested 2026-11-18. Confirmed good: brightness 0.25, claymore always shows, menu loop, burst speed and reach, bows,
+blinks, zoom/linger, skirt, belt, last hit. Declined: gold flecks, menu sparkles, summon chime (annoying).
+- Import the new animations; re-check skill/burst/combo hit times and lengths against them.
+- Burst damage sweeps LEFT to RIGHT (her swing; it's right to left now): flip the sweep order in tickSwing.
+- Skill: 360 degrees, about 2 blocks out (not half her reach), knockback 1.5x.
+- Menu poses: blend into the pose more slowly (snaps in too fast; now 5 ticks).
+- Given weapons hovering on her back sit inside her: move them out behind her (a `weapon_back_grip` bone).
+- Odd-pivot items (trident) look wrong at `weapon_grip`: draw those the vanilla third-person way instead.
+- Charged attack, if animated by then.
+
 ### Pinned: waiting on you
 - Menu pose jump: the cut times were right (`menu_armor` 0.42 s, `menu_weapon` 0.96 s); GeckoLib's own
   start-then-loop let her drop toward rest when the loop began. Fixed: the menu holds the start's last frame and
   switches to the loop itself, with no blend. Check it in game.
 - Charged attack: animate `animation.noelle.charged`; I switch it on with its length and hit moments.
 - Paint the belt bow's new 3x spot and the mini shield's 5x7 faces (grey placeholder now).
-- In-game check after the latest build: lighting softness (now 0.25), skill/burst timing, bows, blinks, menu linger.
+- Test Dummy: keep until Mark 1 is done, then out of the release? (unanswered)
 
 ## Companion menu (right-click her)
 - Equipment: 4 armor slots + 1 weapon slot (no other storage).
