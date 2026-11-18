@@ -55,13 +55,30 @@ public class CompanionModel<T extends CompanionEntity> extends DefaultedEntityGe
 		return scaledBones.computeIfAbsent(current.animation(), animation -> {
 			Set<String> names = new HashSet<>();
 			for (BoneAnimation bone : animation.boneAnimations()) {
-				var scale = bone.scaleKeyFrames();
-				if (!scale.xKeyframes().isEmpty() || !scale.yKeyframes().isEmpty() || !scale.zKeyframes().isEmpty()) {
+				if (keysScale(bone)) {
 					names.add(bone.boneName());
 				}
 			}
 			return names;
 		});
+	}
+
+	/**
+	 * Whether an animation has scale keys for this bone. Read by reflection: GeckoLib's keyframe types name a math
+	 * class (mclib's IValue) that isn't on this mod's compile classpath, so they can't be named here.
+	 */
+	private static boolean keysScale(BoneAnimation bone) {
+		try {
+			Object stack = BoneAnimation.class.getMethod("scaleKeyFrames").invoke(bone);
+			for (String axis : new String[] {"xKeyframes", "yKeyframes", "zKeyframes"}) {
+				if (!((java.util.List<?>) stack.getClass().getMethod(axis).invoke(stack)).isEmpty()) {
+					return true;
+				}
+			}
+		} catch (ReflectiveOperationException | ClassCastException e) {
+			return false;
+		}
+		return false;
 	}
 
 	@Override
