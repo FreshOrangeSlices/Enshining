@@ -36,7 +36,7 @@ import software.bernie.geckolib.core.animation.RawAnimation;
  * <ul>
  * <li>Skill, Breastplate: she stands her ground while stone bursts out all round her (half her claymore's reach) and
  * shields her and her owner (absorption); while it lasts, her hits may heal them both.</li>
- * <li>Burst, Sweeping Time: one huge 180-degree swing in front of her on the animation's beat (she can walk at half
+ * <li>Burst, Sweeping Time: one huge 180-degree swing in front of her on the animation's second swing (she can walk at half
  * speed through it), then for 15 seconds her armor turns into attack and her swings hit everything around the
  * target.</li>
  * </ul>
@@ -45,10 +45,11 @@ public class NoelleEntity extends CompanionEntity {
 	public static final int SHIELD_TICKS = 240;
 	public static final int BURST_TICKS = 300;
 	/**
-	 * On the animations' beats: the skill's stone armor bursts out as she plants (0.25 s in); the burst's big swing
-	 * starts 0.9 s in and sweeps across 180 degrees in front of her over 0.2 s, as the claymore goes through.
+	 * On the animations' beats: the skill's stone armor bursts out as she plants (0.25 s in). The burst's first swing
+	 * is only the wind-up; its second, the big turning sweep (1.33-1.58 s in the animation), is the hit: 1.35 s in it
+	 * sweeps across 180 degrees in front of her over a quarter second, as the claymore goes through.
 	 */
-	private static final int SKILL_BLAST_TICKS = 5, BURST_SWING_TICKS = 18, SWING_STEPS = 4;
+	private static final int SKILL_BLAST_TICKS = 5, BURST_SWING_TICKS = 27, SWING_STEPS = 5;
 	/** How far the burst's swing reaches (blocks from her middle to the enemy's edge): her claymore at its biggest. */
 	private static final double BURST_SWING_REACH = 6.0;
 
@@ -196,7 +197,7 @@ public class NoelleEntity extends CompanionEntity {
 	}
 
 	/**
-	 * One step of her burst's big swing: the claymore sweeps a 45-degree slice further across the 180 degrees in
+	 * One step of her burst's big swing: the claymore sweeps a 36-degree slice further across the 180 degrees in
 	 * front of her (her right to her left), and Geo damage lands on every enemy it has passed (once each).
 	 */
 	private void tickSwing() {

@@ -40,8 +40,9 @@ Nothing here is built yet unless marked done. Order is roughly the order we'll d
   (in the world; not in the menu yet).
 - Skill and burst (code): one at a time, each plays to its end (before, the next tick could start the other on top:
   the burst got skipped, the skill cut off). Skill: she stands still for the whole animation; stone bursts out all
-  round her at half her claymore's reach, 0.25 s in. Burst: she can walk at half speed; 0.9 s in her claymore
-  sweeps 180 degrees in front of her (right to left over 0.2 s), 6 blocks out.
+  round her at half her claymore's reach, 0.25 s in. Burst: she can walk at half speed; the first swing is only the
+  wind-up, the second (the big turning sweep) hits: 1.35 s in her claymore sweeps 180 degrees in front of her
+  (right to left over 0.25 s), 6 blocks out.
 - Combo: her last, downward hit does 1 more damage and only catches what's in a 50-degree slice ahead (a third of
   the others' 150).
 - Charged attack (code ready, off): `animation.noelle.charged`, every second combo in place of starting over when
