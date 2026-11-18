@@ -85,6 +85,7 @@ public class CompanionModel<T extends CompanionEntity> extends DefaultedEntityGe
 		sway("skirt", 0.0F, 0.03F * heavy, trail * 0.5F, 0.07F, swing, amount, time, animated);
 		skirtRing(companion, time, state.getPartialTick());
 		eyes(companion, time);
+		EyeRig.apply(this, companion, time, state.getPartialTick(), expression(companion, time));   // experiments only
 		flow(companion, state, time, swing, amount);
 		// Armor pieces of the rig stay hidden until armor drawing is in.
 		for (CoreGeoBone bone : getAnimationProcessor().getRegisteredBones()) {
@@ -144,7 +145,7 @@ public class CompanionModel<T extends CompanionEntity> extends DefaultedEntityGe
 		bone.setScaleZ(z * s);
 	}
 
-	private static final int OPEN = 0, HALF = 1, CLOSED = 2, HAPPY = 3;
+	static final int OPEN = 0, HALF = 1, CLOSED = 2, HAPPY = 3;
 	private static final String[] EYES = {"eyes_open", "eyes_half", "eyes_closed", "eyes_happy"};
 
 	/**
@@ -167,22 +168,7 @@ public class CompanionModel<T extends CompanionEntity> extends DefaultedEntityGe
 			return;
 		}
 		int sat = companion.sittingTicks;
-		int phase = ((int) time + companion.getId() * 37) % 160;   // an 8-second rhythm, different per companion
-		int look;
-		if (companion.hurtTime > 0 || companion.deathTime > 0 || companion.menuEyesClosed) {
-			look = CLOSED;
-		} else if (companion.tickCount < companion.eyesHappyUntil) {
-			look = HAPPY;
-		} else if (sat > 1800) {
-			look = CLOSED;                                               // asleep
-		} else if (sat > 600) {
-			look = phase < 30 ? CLOSED : HALF;                           // dozing, nodding off now and then
-		} else if (sat > 0) {
-			float drowsy = 0.2F + 0.6F * sat / 600.0F;                  // more of each 8 seconds spent dozing
-			look = phase < drowsy * 160 ? HALF : blink(companion.getId(), time);
-		} else {
-			look = blink(companion.getId(), time);
-		}
+		int look = expression(companion, time);
 		if (look == HAPPY && !drawn(bones[HAPPY])) {
 			look = CLOSED;
 		}
@@ -197,6 +183,33 @@ public class CompanionModel<T extends CompanionEntity> extends DefaultedEntityGe
 				bones[i].setHidden(i != look);
 			}
 		}
+	}
+
+	/**
+	 * Which face she's making now (OPEN, HALF, CLOSED or HAPPY), shared by the painted eye sheets and the moving
+	 * eyes ({@link EyeRig}): shut while hurt, dying or in the menu's armor pose; happy for a moment after good
+	 * news; asleep, dozing or drifting off while sitting; otherwise blinking now and then.
+	 */
+	static int expression(CompanionEntity companion, float time) {
+		int sat = companion.sittingTicks;
+		int phase = ((int) time + companion.getId() * 37) % 160;   // an 8-second rhythm, different per companion
+		if (companion.hurtTime > 0 || companion.deathTime > 0 || companion.menuEyesClosed) {
+			return CLOSED;
+		}
+		if (companion.tickCount < companion.eyesHappyUntil) {
+			return HAPPY;
+		}
+		if (sat > 1800) {
+			return CLOSED;                                               // asleep
+		}
+		if (sat > 600) {
+			return phase < 30 ? CLOSED : HALF;                           // dozing, nodding off now and then
+		}
+		if (sat > 0) {
+			float drowsy = 0.2F + 0.6F * sat / 600.0F;                  // more of each 8 seconds spent dozing
+			return phase < drowsy * 160 ? HALF : blink(companion.getId(), time);
+		}
+		return blink(companion.getId(), time);
 	}
 
 	/** Where a blink is at: one blink per 90-tick stretch, starting somewhere in its first 60 ticks; 7 ticks long. */

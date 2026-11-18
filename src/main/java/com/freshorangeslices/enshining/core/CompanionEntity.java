@@ -338,6 +338,15 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 	 * been far away (coming back after 10 seconds or more earns a smile).
 	 */
 	public int eyesHappyUntil, sittingTicks, ownerAwayTicks;
+	/**
+	 * Client side, the moving eyes (experiments, see client EyeRig): where the pupils point (-1..1 each way), the
+	 * idle glance and when it changes, how open the eyes are, pupil size, who she's meeting the eyes of, the frame
+	 * clock, and her head's place in the world from the last frame (from the renderer).
+	 */
+	public float eyeLookX, eyeLookY, eyeGlanceX, eyeGlanceY, eyeOpen = 1.0F, pupilSize = 1.0F, eyeLastTime = -1.0F;
+	public int eyeGlanceUntil, eyeContactId, eyeContactUntil;
+	@Nullable
+	public org.joml.Matrix4f eyeHeadMatrix;
 	/** Client side, the menu portrait: eyes shut for this pose (her armor pose). */
 	public boolean menuEyesClosed;
 	/** Entity event: she's happy (levelled up, her menu opened). Hearts (event 7) make her smile too. */

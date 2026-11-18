@@ -27,5 +27,6 @@ public final class ClientSetup {
 	@SubscribeEvent
 	public static void renderers(EntityRenderersEvent.RegisterRenderers event) {
 		event.registerEntityRenderer(ModEntities.NOELLE.get(), context -> new CompanionRenderer<>(context, new NoelleModel()));
+		event.registerEntityRenderer(ModEntities.TEST_DUMMY.get(), context -> new CompanionRenderer<>(context, new TestDummyModel()));
 	}
 }

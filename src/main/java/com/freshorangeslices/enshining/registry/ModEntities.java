@@ -2,6 +2,7 @@ package com.freshorangeslices.enshining.registry;
 
 import com.freshorangeslices.enshining.Enshining;
 import com.freshorangeslices.enshining.character.noelle.NoelleEntity;
+import com.freshorangeslices.enshining.experiments.TestDummyEntity;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.MobCategory;
 import net.minecraft.world.entity.SpawnPlacements;
@@ -20,11 +21,16 @@ public final class ModEntities {
 	public static final RegistryObject<EntityType<NoelleEntity>> NOELLE = ENTITIES.register("noelle",
 			() -> EntityType.Builder.of(NoelleEntity::new, MobCategory.CREATURE).sized(0.6F, 1.8F).clientTrackingRange(10).build("noelle"));
 
+	/** Experiments only: a companion wearing the experiments model. */
+	public static final RegistryObject<EntityType<TestDummyEntity>> TEST_DUMMY = ENTITIES.register("test_dummy",
+			() -> EntityType.Builder.of(TestDummyEntity::new, MobCategory.CREATURE).sized(0.6F, 1.8F).clientTrackingRange(10).build("test_dummy"));
+
 	private ModEntities() {
 	}
 
 	public static void attributes(EntityAttributeCreationEvent event) {
 		event.put(NOELLE.get(), NoelleEntity.createAttributes().build());
+		event.put(TEST_DUMMY.get(), TestDummyEntity.createAttributes().build());
 	}
 
 	public static void spawnPlacements(SpawnPlacementRegisterEvent event) {

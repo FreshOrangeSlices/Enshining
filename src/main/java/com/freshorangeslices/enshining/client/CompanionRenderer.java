@@ -61,6 +61,8 @@ public class CompanionRenderer<T extends CompanionEntity> extends GeoEntityRende
 	private SkirtRing ring;
 	/** The bones holding her claymore's cubes, in hand and hovering behind her (tracked for the sparkle). */
 	private final List<GeoBone> handBlade = new ArrayList<>(), backBlade = new ArrayList<>();
+	@Nullable
+	private GeoBone headBone;
 
 	public CompanionRenderer(EntityRendererProvider.Context context, CompanionModel<T> model) {
 		super(context, model);
@@ -186,12 +188,20 @@ public class CompanionRenderer<T extends CompanionEntity> extends GeoEntityRende
 			handBlade.clear();
 			backBlade.clear();
 			model.getBone("weapon").ifPresent(b -> bladeBones(b, handBlade));
+			headBone = model.getBone("pupil_left").or(() -> model.getBone("pupil_right")).isPresent()
+					? model.getBone("head").orElse(null) : null;   // only models with moving eyes need it
+			if (headBone != null) {
+				headBone.setTrackingMatrices(true);
+			}
 			model.getBone("weapon_back").ifPresent(b -> bladeBones(b, backBlade));
 		}
 		super.actuallyRender(poseStack, companion, model, renderType, bufferSource, buffer, isReRender, partialTick, packedLight,
 				packedOverlay, red, green, blue, alpha);
 		// The sparkle, in the world only (not for the menu's portrait copy), from where the blade was just drawn.
 		if (!isReRender && companion.level().getEntity(companion.getId()) == companion) {
+			if (headBone != null) {
+				companion.eyeHeadMatrix = new org.joml.Matrix4f(headBone.getWorldSpaceMatrix());
+			}
 			float frame = Minecraft.getInstance().getDeltaFrameTime();
 			if (companion.handWeaponIn > 0 && companion.handWeaponIn < 1) {
 				sparkle(companion, handBlade, frame, companion.handWeaponWanted);
