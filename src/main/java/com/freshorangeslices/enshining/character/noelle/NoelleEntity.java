@@ -46,10 +46,10 @@ public class NoelleEntity extends CompanionEntity {
 	public static final int BURST_TICKS = 300;
 	/**
 	 * On the animations' beats: the skill's stone armor bursts out as she plants (0.25 s in). The burst's first swing
-	 * is only the wind-up; its second, the big turning sweep (1.33-1.58 s in the animation), is the hit: 1.35 s in it
-	 * sweeps across 180 degrees in front of her over a quarter second, as the claymore goes through.
+	 * is only the wind-up; the hit is its second, big turning sweep: from 1.1 s to the end (1.75 s) it sweeps across
+	 * 180 degrees in front of her, a slice a tick, as the claymore goes through.
 	 */
-	private static final int SKILL_BLAST_TICKS = 5, BURST_SWING_TICKS = 27, SWING_STEPS = 5;
+	private static final int SKILL_BLAST_TICKS = 5, BURST_SWING_TICKS = 22, SWING_STEPS = 14;
 	/** How far the burst's swing reaches (blocks from her middle to the enemy's edge): her claymore at its biggest. */
 	private static final double BURST_SWING_REACH = 6.0;
 
@@ -197,7 +197,7 @@ public class NoelleEntity extends CompanionEntity {
 	}
 
 	/**
-	 * One step of her burst's big swing: the claymore sweeps a 36-degree slice further across the 180 degrees in
+	 * One step of her burst's big swing: the claymore sweeps a slice (180 / 14 degrees) further across the 180 degrees in
 	 * front of her (her right to her left), and Geo damage lands on every enemy it has passed (once each).
 	 */
 	private void tickSwing() {
@@ -226,9 +226,9 @@ public class NoelleEntity extends CompanionEntity {
 			// This step's slice of the gold crescent, out to the swing's reach.
 			Vec3 from = position().add(0, 1.0, 0);
 			float sliceYaw = (float) (yBodyRot + upTo - 90.0 / SWING_STEPS);
-			Fx.arc(server, element().dust(), from, sliceYaw, BURST_SWING_REACH * 0.85, 180.0 / SWING_STEPS, 14, 0.3);
-			Fx.arc(server, element().dust(), from, sliceYaw, BURST_SWING_REACH * 0.55, 180.0 / SWING_STEPS, 9, 0.2);
-			Fx.arc(server, ParticleTypes.WAX_OFF, from, sliceYaw, BURST_SWING_REACH * 0.7, 180.0 / SWING_STEPS, 4, 0.3);
+			Fx.arc(server, element().dust(), from, sliceYaw, BURST_SWING_REACH * 0.85, 180.0 / SWING_STEPS, 5, 0.3);
+			Fx.arc(server, element().dust(), from, sliceYaw, BURST_SWING_REACH * 0.55, 180.0 / SWING_STEPS, 3, 0.2);
+			Fx.arc(server, ParticleTypes.WAX_OFF, from, sliceYaw, BURST_SWING_REACH * 0.7, 180.0 / SWING_STEPS, 2, 0.3);
 			if (swingStep == SWING_STEPS - 1) {
 				server.sendParticles(ParticleTypes.FLASH, getX(), getY() + 1, getZ(), 1, 0, 0, 0, 0);
 			}

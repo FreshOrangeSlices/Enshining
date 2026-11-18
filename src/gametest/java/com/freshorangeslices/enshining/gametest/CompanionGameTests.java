@@ -188,11 +188,11 @@ public final class CompanionGameTests {
 			noelle.setYBodyRot(0.0F);
 			noelle.useBurst(front);
 			helper.assertTrue(front.getHealth() == front.getMaxHealth(), "No damage at the cast: the swing lands with the animation");
-			for (int i = 0; i < 26; i++) {
+			for (int i = 0; i < 20; i++) {
 				noelle.tickAbilitiesForTests();
 			}
 			helper.assertTrue(front.getHealth() == front.getMaxHealth(), "Nothing on the first swing: it's only the wind-up");
-			for (int i = 0; i < 8; i++) {
+			for (int i = 0; i < 16; i++) {
 				noelle.tickAbilitiesForTests();
 			}
 			helper.assertTrue(front.getHealth() < front.getMaxHealth(), "The 180-degree swing reached 5 blocks ahead: health "

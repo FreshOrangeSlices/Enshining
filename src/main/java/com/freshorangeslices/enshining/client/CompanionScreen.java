@@ -60,6 +60,9 @@ public class CompanionScreen extends AbstractContainerScreen<CompanionMenu> {
 	/** After you stop hovering a slot, its close-up lingers 4 s; after equipping something, 6.5 s. */
 	private static final int HOVER_LINGER = 80, EQUIP_LINGER = 130;
 	private float follow = 1.0F, followO = 1.0F;   // how much she follows the cursor (0 while she poses), eased
+	private Focus posing;                          // the pose playing, and for how many ticks
+	private int poseTicks;
+	private boolean poseLooping;                   // past its start, into the repeating part
 	private float zoom, zoomO;         // 0 = full body, 1 = fully zoomed (eased)
 	private float aimY, aimYO;         // the body height (blocks) the camera centres on
 	private final ItemStack[] lastGear = new ItemStack[5];
@@ -160,14 +163,19 @@ public class CompanionScreen extends AbstractContainerScreen<CompanionMenu> {
 			if (baked == null || baked.getAnimation(wanted) == null) {
 				name = baked != null && baked.getAnimation(MENU_IDLE) != null ? MENU_IDLE : IDLE;
 			}
-			// A pose split into a start and a repeating rest (tools/pose_loops.py): the start once, then the rest.
+			// A pose split into a start and a repeating rest (tools/pose_loops.py): the start once (holding its last
+			// frame), then the rest. The menu switches between them itself: GeckoLib's own "this, then that" moves on
+			// and then tries to move on again, finds nothing, and lets her drop back toward her rest pose.
 			if (baked != null && baked.getAnimation(name + "_loop") != null) {
-				RawAnimation pose = RawAnimation.begin();
-				if (baked.getAnimation(name + "_intro") != null) {
-					pose = pose.thenPlay(name + "_intro");
+				var intro = baked.getAnimation(name + "_intro");
+				if (intro != null && poseTicks < Math.ceil(intro.length())) {
+					poseLooping = false;
+					return RawAnimation.begin().thenPlayAndHold(name + "_intro");
 				}
-				return pose.thenLoop(name + "_loop");
+				poseLooping = true;
+				return RawAnimation.begin().thenLoop(name + "_loop");
 			}
+			poseLooping = false;
 			// A pose made to play once (like drawing the weapon) plays once and holds its last frame.
 			if (baked != null && baked.getAnimation(name) != null
 					&& baked.getAnimation(name).loopType() == software.bernie.geckolib.core.animation.Animation.LoopType.PLAY_ONCE) {
@@ -207,10 +215,23 @@ public class CompanionScreen extends AbstractContainerScreen<CompanionMenu> {
 			focus = Focus.FULL;
 		}
 
+		if (focus != posing) {
+			posing = focus;
+			poseTicks = 0;
+		} else {
+			poseTicks++;
+		}
 		switch (focus) {
 			// Her own weapon (or a swapped one) comes out; it's always there, so only the visibility toggle hides it.
-			case WEAPON -> portrait.setMenuPose(pose(MENU_WEAPON), real.setting(CompanionEntity.SHOW_WEAPON));
-			case ARMOR -> portrait.setMenuPose(pose(MENU_ARMOR), false, true);   // eyes shut while she poses
+			// Into a pose over 5 ticks; from its start into its repeating part at once (the two meet exactly).
+			case WEAPON -> {
+				RawAnimation pose = pose(MENU_WEAPON);
+				portrait.setMenuPose(pose, real.setting(CompanionEntity.SHOW_WEAPON), false, poseLooping ? 0 : 5);
+			}
+			case ARMOR -> {
+				RawAnimation pose = pose(MENU_ARMOR);
+				portrait.setMenuPose(pose, false, true, poseLooping ? 0 : 5);   // eyes shut while she poses
+			}
 			default -> portrait.setMenuPose(pose(MENU_IDLE), false, false, 16);   // relaxes back over 0.8 s
 		}
 

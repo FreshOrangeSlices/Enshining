@@ -4159,6 +4159,15 @@
 					]
 				},
 				{
+					"name": "weapon_grip",
+					"parent": "right_hand",
+					"pivot": [
+						-5.5,
+						12.4,
+						0
+					]
+				},
+				{
 					"name": "right_arm_extras",
 					"parent": "right_arm",
 					"pivot": [

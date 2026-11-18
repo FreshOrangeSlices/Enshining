@@ -41,8 +41,8 @@ Nothing here is built yet unless marked done. Order is roughly the order we'll d
 - Skill and burst (code): one at a time, each plays to its end (before, the next tick could start the other on top:
   the burst got skipped, the skill cut off). Skill: she stands still for the whole animation; stone bursts out all
   round her at half her claymore's reach, 0.25 s in. Burst: she can walk at half speed; the first swing is only the
-  wind-up, the second (the big turning sweep) hits: 1.35 s in her claymore sweeps 180 degrees in front of her
-  (right to left over 0.25 s), 6 blocks out.
+  wind-up, the second (the big turning sweep) hits: from 1.08 s to the end (1.75 s) her claymore sweeps 180
+  degrees in front of her, right to left, 6 blocks out.
 - Combo: her last, downward hit does 1 more damage and only catches what's in a 50-degree slice ahead (a third of
   the others' 150).
 - Charged attack (code ready, off): `animation.noelle.charged`, every second combo in place of starting over when
@@ -74,11 +74,11 @@ Nothing here is built yet unless marked done. Order is roughly the order we'll d
 - Animations: skill, jog, idle fidgets; later `weapon_aura` for the burst.
 
 ### Pinned: waiting on you
-- Menu pose jump: send the frame (or time) where each pose should start looping. Now: `menu_armor` loops from
-  0.42 s, `menu_weapon` from 0.96 s (`tools/pose_loops.py` cuts them there); the jump is likely the cut point.
+- Menu pose jump: the cut times were right (`menu_armor` 0.42 s, `menu_weapon` 0.96 s); GeckoLib's own
+  start-then-loop let her drop toward rest when the loop began. Fixed: the menu holds the start's last frame and
+  switches to the loop itself, with no blend. Check it in game.
 - Charged attack: animate `animation.noelle.charged`; I switch it on with its length and hit moments.
 - Paint the belt bow's new 3x spot and the mini shield's 5x7 faces (grey placeholder now).
-- Given weapons working with her animations (code, mine): see Armor and weapons below.
 - In-game check after the latest build: lighting softness (now 0.25), skill/burst timing, bows, blinks, menu linger.
 
 ## Companion menu (right-click her)
@@ -103,9 +103,11 @@ Nothing here is built yet unless marked done. Order is roughly the order we'll d
   leggings: skirt + waist extras; boots: foot extras).
 - Weapon swap: a held weapon REPLACES the claymore's damage (+ her level bonus); enchantments apply.
   Skill and burst work with any weapon; the burst keeps its magic overlay and doubled reach.
-- To do (code): a weapon you give her has to work with her animations too, not just her claymore: held in her
-  hand through every attack, skill, burst and menu pose, appearing and vanishing by magic with the sparkle, and
-  hovering on her back when she's not fighting.
+- Given weapons (done, code): the same combat animations as her claymore (no one-handed set), no resizing to the
+  claymore (only a visual preference). Held at `weapon_grip` (in `right_hand`): the bone's pivot is the fist on the
+  handle, the blade points along its -Z like the claymore; move or turn it in Blockbench. `preview_sword` under it
+  is a stand-in vanilla sword for Blockbench only (not exported). It comes and goes like the claymore (grows in,
+  fades, sparkles along its blade) and hovers on her back; her burst glow overlays whatever she holds.
 
 ## Damage
 - Base claymore damage 3.5 (1.5 combos kill a zombie). Level bonus +0.25 attack per level.

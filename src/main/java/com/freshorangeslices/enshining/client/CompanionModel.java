@@ -44,6 +44,26 @@ public class CompanionModel<T extends CompanionEntity> extends DefaultedEntityGe
 		});
 	}
 
+	private final Map<Animation, Set<String>> scaledBones = new IdentityHashMap<>();
+
+	/** The bones the current animation sets the size of (scale keys), the only ones whose size it decides. */
+	private Set<String> scaledBones(AnimationState<T> state) {
+		AnimationProcessor.QueuedAnimation current = state.getController().getCurrentAnimation();
+		if (current == null) {
+			return Set.of();
+		}
+		return scaledBones.computeIfAbsent(current.animation(), animation -> {
+			Set<String> names = new HashSet<>();
+			for (BoneAnimation bone : animation.boneAnimations()) {
+				var scale = bone.scaleKeyFrames();
+				if (!scale.xKeyframes().isEmpty() || !scale.yKeyframes().isEmpty() || !scale.zKeyframes().isEmpty()) {
+					names.add(bone.boneName());
+				}
+			}
+			return names;
+		});
+	}
+
 	@Override
 	public void setCustomAnimations(T companion, long instanceId, AnimationState<T> state) {
 		// GeckoLib's head turn REPLACES the head's rotation with the look direction, which would wipe out head keys
@@ -72,7 +92,7 @@ public class CompanionModel<T extends CompanionEntity> extends DefaultedEntityGe
 			head.setRotX(baseX + animX + limitLook(lookX, animX, 0.7F));
 			head.setRotY(baseY + animY + limitLook(lookY, animY, 1.3F));
 		}
-		weapons(companion, state, animated);
+		weapons(companion, state, scaledBones(state));
 		vanillaLimbs(companion, state, animated);
 
 		// The whole skirt sways a little with each step and breathes when still, heavier when running or in the air
@@ -104,7 +124,7 @@ public class CompanionModel<T extends CompanionEntity> extends DefaultedEntityGe
 	 * and bobs. Each grows in over 0.15 s and shrinks away over 0.2 s (unless the animation itself scales it);
 	 * the renderer scatters light over the blade while it does.
 	 */
-	private void weapons(T companion, AnimationState<T> state, Set<String> animated) {
+	private void weapons(T companion, AnimationState<T> state, Set<String> scaled) {
 		float time = companion.tickCount + state.getPartialTick();
 		float dt = time - companion.weaponLastTime;
 		boolean snap = companion.weaponLastTime < 0 || dt < 0 || dt > 4.0F;
@@ -112,7 +132,9 @@ public class CompanionModel<T extends CompanionEntity> extends DefaultedEntityGe
 			companion.weaponLastTime = time;
 		}
 		boolean shown = companion.setting(CompanionEntity.SHOW_WEAPON);
-		boolean hand = shown && companion.showsWeaponInHand() && !companion.holdsSwappedWeapon();
+		// A weapon you gave her comes and goes exactly like her claymore (the renderer draws it instead of the
+		// claymore's cubes, at "weapon_grip"); her burst glow, in the claymore's bone, overlays either.
+		boolean hand = shown && companion.showsWeaponInHand();
 		boolean back = shown && companion.showBackWeapon();
 		// In her hand it's there at once (any grow-in reads as a delay at the start of a swing); the sparkle still
 		// plays over it for a moment. It still fades away over 0.2 s when she's done.
@@ -127,8 +149,8 @@ public class CompanionModel<T extends CompanionEntity> extends DefaultedEntityGe
 
 		CoreGeoBone weapon = getAnimationProcessor().getBone("weapon");
 		if (weapon != null) {
-			weapon.setHidden(companion.handWeaponIn <= 0 || companion.holdsSwappedWeapon());
-			materialise(weapon, companion.handWeaponIn, animated.contains("weapon"));
+			weapon.setHidden(companion.handWeaponIn <= 0);
+			materialise(weapon, companion.handWeaponIn, scaled.contains("weapon"));
 		}
 		CoreGeoBone backBone = getAnimationProcessor().getBone("weapon_back");
 		if (backBone != null) {
@@ -138,11 +160,15 @@ public class CompanionModel<T extends CompanionEntity> extends DefaultedEntityGe
 			float drop = (1 - in) * (1 - in) * 4.0F;   // floats down the last few pixels into place
 			backBone.setPosY(backBone.getInitialSnapshot().getOffsetY() + (float) Math.sin(time * 0.08) * 0.5F + drop);
 			backBone.setRotZ(backBone.getInitialSnapshot().getRotZ() + (float) Math.sin(time * 0.05) * 0.03F);
-			materialise(backBone, in, animated.contains("weapon_back"));
+			materialise(backBone, in, scaled.contains("weapon_back"));
 		}
 	}
 
-	/** Scales a weapon bone by how far it has materialised (eased), on top of the animation's own scale. */
+	/**
+	 * Scales a weapon bone by how far it has materialised (eased), on top of the animation's own scale if it sets
+	 * one, else on top of its normal size. Never on top of last frame's: GeckoLib leaves a bone this code sized as it
+	 * was, so a claymore caught fading out (between a combo and a skill, say) stayed shrunk to nothing.
+	 */
 	private static void materialise(CoreGeoBone bone, float in, boolean animated) {
 		float s = in >= 1 ? 1 : in * in * (3 - 2 * in);
 		float x = animated ? bone.getScaleX() : bone.getInitialSnapshot().getScaleX();

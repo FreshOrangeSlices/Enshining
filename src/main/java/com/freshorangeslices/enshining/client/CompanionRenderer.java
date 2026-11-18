@@ -49,6 +49,22 @@ import software.bernie.geckolib.util.RenderUtils;
 public class CompanionRenderer<T extends CompanionEntity> extends GeoEntityRenderer<T> {
 	private static final String AURA = "weapon_aura";
 	private static final String SKIRT = "skirt";
+	/**
+	 * Where a weapon you give her is held: the bone's pivot is the fist on its handle, the blade points along the
+	 * bone's -Z (forward, like her claymore). Move or turn it in Blockbench to fit the hand. Without one, the old
+	 * spot at "right_hand".
+	 */
+	private static final String GRIP = "weapon_grip";
+	/**
+	 * A vanilla handheld item's sprite (handle bottom-left, tip top-right) turned so its diagonal points along -Z
+	 * with its flat facing sideways, then moved so the point a player's fist holds (worked back from the vanilla
+	 * third-person transform, onto the diagonal) sits on the grip. Scale 0.85, as in a player's hand.
+	 */
+	private static final Quaternionf GRIP_TURN = new Quaternionf().setFromNormalized(new Matrix3f(
+			0.0F, -Mth.SQRT_OF_TWO / 2, -Mth.SQRT_OF_TWO / 2,
+			0.0F, Mth.SQRT_OF_TWO / 2, -Mth.SQRT_OF_TWO / 2,
+			1.0F, 0.0F, 0.0F));
+	private static final float GRIP_SCALE = 0.85F, GRIP_FIST = 0.2008F;
 	/** Worn over the skirt (see {@link SkirtRing#ride}). */
 	private static final String WAIST = "waist_extras";
 	private static final int FULL_BRIGHT = 0xF000F0;
@@ -89,6 +105,8 @@ public class CompanionRenderer<T extends CompanionEntity> extends GeoEntityRende
 	private SkirtRing ring;
 	/** The bones holding her claymore's cubes, in hand and hovering behind her (tracked for the sparkle). */
 	private final List<GeoBone> handBlade = new ArrayList<>(), backBlade = new ArrayList<>();
+	@Nullable
+	private GeoBone gripBone;
 	@Nullable
 	private GeoBone headBone;
 
@@ -138,8 +156,11 @@ public class CompanionRenderer<T extends CompanionEntity> extends GeoEntityRende
 				if (!companion.holdsSwappedWeapon() || !companion.setting(CompanionEntity.SHOW_WEAPON)) {
 					return null;
 				}
+				// In her hand only while her claymore would be (it fades in and out the same way).
+				boolean inHand = companion.handWeaponIn > 0;
 				return switch (bone.getName()) {
-					case "right_hand" -> companion.showsWeaponInHand() ? companion.getMainHandItem() : null;
+					case GRIP -> inHand ? companion.getMainHandItem() : null;
+					case "right_hand" -> gripBone == null && inHand ? companion.getMainHandItem() : null;
 					case "weapon_back" -> companion.showBackWeapon() ? companion.getMainHandItem() : null;
 					default -> null;
 				};
@@ -147,14 +168,21 @@ public class CompanionRenderer<T extends CompanionEntity> extends GeoEntityRende
 
 			@Override
 			protected ItemDisplayContext getTransformTypeForStack(GeoBone bone, ItemStack stack, T companion) {
-				return ItemDisplayContext.THIRD_PERSON_RIGHT_HAND;
+				return GRIP.equals(bone.getName()) ? ItemDisplayContext.NONE : ItemDisplayContext.THIRD_PERSON_RIGHT_HAND;
 			}
 
 			@Override
 			protected void renderStackForBone(PoseStack poseStack, GeoBone bone, ItemStack stack, T companion,
 					MultiBufferSource bufferSource, float partialTick, int packedLight, int packedOverlay) {
 				poseStack.pushPose();
-				if ("right_hand".equals(bone.getName())) {
+				if (GRIP.equals(bone.getName())) {
+					// Handle in her fist, blade along the grip; grows in and fades out like her claymore.
+					float in = companion.handWeaponIn;
+					float grown = (in >= 1 ? 1 : in * in * (3 - 2 * in)) * GRIP_SCALE;
+					poseStack.mulPose(GRIP_TURN);
+					poseStack.scale(grown, grown, grown);
+					poseStack.translate(GRIP_FIST, GRIP_FIST, 0.0F);
+				} else if ("right_hand".equals(bone.getName())) {
 					// Held like a player holds it: blade forward out of the fist.
 					poseStack.mulPose(Axis.XP.rotationDegrees(-90.0F));
 					poseStack.translate(0.0, 0.1, 0.0);
@@ -217,6 +245,10 @@ public class CompanionRenderer<T extends CompanionEntity> extends GeoEntityRende
 			handBlade.clear();
 			backBlade.clear();
 			model.getBone("weapon").ifPresent(b -> bladeBones(b, handBlade));
+			gripBone = model.getBone(GRIP).orElse(null);
+			if (gripBone != null) {
+				gripBone.setTrackingMatrices(true);
+			}
 			headBone = model.getBone("pupil_left").or(() -> model.getBone("pupil_right")).isPresent()
 					? model.getBone("head").orElse(null) : null;   // only models with moving eyes need it
 			if (headBone != null) {
@@ -238,7 +270,11 @@ public class CompanionRenderer<T extends CompanionEntity> extends GeoEntityRende
 			}
 			float frame = Minecraft.getInstance().getDeltaFrameTime();
 			if (companion.handWeaponSpark > 0 || companion.handWeaponIn > 0 && companion.handWeaponIn < 1) {
-				sparkle(companion, handBlade, frame, companion.handWeaponWanted);
+				if (companion.holdsSwappedWeapon() && gripBone != null) {
+					sparkleAlong(companion, gripBone, frame, companion.handWeaponWanted);
+				} else {
+					sparkle(companion, handBlade, frame, companion.handWeaponWanted);
+				}
 			}
 			if (companion.backWeaponIn > 0 && companion.backWeaponIn < 1) {
 				sparkle(companion, backBlade, frame, companion.backWeaponWanted);
@@ -282,6 +318,23 @@ public class CompanionRenderer<T extends CompanionEntity> extends GeoEntityRende
 			new Quaternionf().rotationZYX((float) rot.z(), (float) rot.y(), (float) rot.x()).transform(p.sub(cp)).add(cp);
 			p.sub(bone.getPivotX() / 16, bone.getPivotY() / 16, bone.getPivotZ() / 16);
 			org.joml.Vector4f world = bone.getWorldSpaceMatrix().transform(new org.joml.Vector4f(p, 1));
+			if (random.nextInt(3) == 0) {
+				companion.level().addParticle(net.minecraft.core.particles.ParticleTypes.FIREWORK, world.x(), world.y(), world.z(),
+						(random.nextFloat() - 0.5F) * 0.02F, -0.005F - random.nextFloat() * 0.015F, (random.nextFloat() - 0.5F) * 0.02F);
+			} else {
+				companion.level().addParticle(companion.element().dust(), world.x(), world.y(), world.z(), 0, -0.01, 0);
+			}
+		}
+	}
+
+	/** The same soft lights for a weapon you gave her: along the first block out from the grip, where its blade is. */
+	private static void sparkleAlong(CompanionEntity companion, GeoBone grip, float frameTicks, boolean appearing) {
+		var random = companion.getRandom();
+		float budget = frameTicks * (appearing ? 6.0F : 8.0F);
+		int count = (int) budget + (random.nextFloat() < budget - (int) budget ? 1 : 0);
+		for (int i = 0; i < count; i++) {
+			org.joml.Vector4f world = grip.getWorldSpaceMatrix().transform(new org.joml.Vector4f((random.nextFloat() - 0.5F) * 0.08F,
+					(random.nextFloat() - 0.5F) * 0.08F, 0.15F - random.nextFloat() * 0.95F, 1));
 			if (random.nextInt(3) == 0) {
 				companion.level().addParticle(net.minecraft.core.particles.ParticleTypes.FIREWORK, world.x(), world.y(), world.z(),
 						(random.nextFloat() - 0.5F) * 0.02F, -0.005F - random.nextFloat() * 0.015F, (random.nextFloat() - 0.5F) * 0.02F);
@@ -414,7 +467,7 @@ public class CompanionRenderer<T extends CompanionEntity> extends GeoEntityRende
 			return;
 		}
 		// A swapped-in weapon replaces her own weapon model, in hand and hovering behind her.
-		if (animatable != null && animatable.holdsSwappedWeapon() && isOwnWeaponModel(bone)) {
+		if (animatable != null && animatable.holdsSwappedWeapon() && isOwnWeaponModel(bone) && !auraPass) {
 			return;
 		}
 		// The skirt is drawn in its own pass only (culled, with its own texture if it has one).
