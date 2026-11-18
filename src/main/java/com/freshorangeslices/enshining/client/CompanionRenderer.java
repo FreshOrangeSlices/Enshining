@@ -74,11 +74,11 @@ public class CompanionRenderer<T extends CompanionEntity> extends GeoEntityRende
 	/** The skirt's motion this frame: front swing, back swing, flare, twist (radians, already limited). */
 	private final float[] motion = new float[4];
 	/**
-	 * In the world (not the menu portrait): her faces are lit softly, each normal tipped halfway toward the sky, so
-	 * her front reads about as bright as Genshin's flat shading instead of Minecraft's harsh grey (a mostly white
-	 * outfit goes dull grey otherwise). worldUp is the sky's direction in the camera's space this frame.
+	 * In the world (not the menu portrait): her faces are lit a little softer than Minecraft's, each normal tipped a
+	 * quarter of the way toward the sky (fronts ~0.85 bright instead of ~0.74, sides ~0.64 instead of ~0.59; halfway
+	 * was far too bright). worldUp is the sky's direction in the camera's space this frame.
 	 */
-	private static final float SOFT_LIGHT = 0.5F;
+	private static final float SOFT_LIGHT = 0.25F;
 	private boolean inWorld;
 	private final Vector3f worldUp = new Vector3f(0, 1, 0);
 	private final Vector4f cornerScratch = new Vector4f();

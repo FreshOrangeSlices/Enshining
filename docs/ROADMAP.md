@@ -48,8 +48,9 @@ Nothing here is built yet unless marked done. Order is roughly the order we'll d
   an enemy is still in reach after the last hit, hitting all round her. Switched on (with its length and hit
   moments) once it's animated.
 - Lighting in the world: flat sheets (eyes, straps, panels) are lit as the side you see, like any face (GeckoLib's
-  own rule made her eyes glow against her face whenever you looked down at her); and her faces are lit softly
-  (normals tipped halfway to the sky): front faces ~0.92 bright instead of ~0.74, sides ~0.83 instead of ~0.59.
+  own rule made her eyes glow against her face whenever you looked down at her); and her faces are lit a little
+  softer (normals tipped a quarter of the way to the sky): fronts ~0.85 bright instead of Minecraft's ~0.74,
+  sides ~0.64 instead of ~0.59 (halfway, 0.92 / 0.83, was far too bright).
   The menu portrait keeps its own lighting.
 - `flow_` bones: sway on top of the rest pose (or the animation's key), never on top of last frame's sway (that
   added up into the bows spinning). Blinks: 4 ticks while moving or fighting, the slow 7 when standing still.
@@ -70,6 +71,13 @@ Nothing here is built yet unless marked done. Order is roughly the order we'll d
 - Still yours: paint the skirt; redo belt + shield, scarf (`chest_extras`, `flow_` tails), shoulder piece;
   `flow_` bangs; eyes (`eyes_open` / `eyes_half` / `eyes_closed`); move `weapon_back_model` where you like it.
 - Animations: skill, jog, idle fidgets; later `weapon_aura` for the burst.
+
+### Pinned: waiting on you
+- Menu pose jump: send the frame (or time) where each pose should start looping. Now: `menu_armor` loops from
+  0.42 s, `menu_weapon` from 0.96 s (`tools/pose_loops.py` cuts them there); the jump is likely the cut point.
+- Charged attack: animate `animation.noelle.charged`; I switch it on with its length and hit moments.
+- Paint the belt bow's new 3x spot and the mini shield's 5x7 faces (grey placeholder now).
+- In-game check after the latest build: lighting softness (now 0.25), skill/burst timing, bows, blinks, menu linger.
 
 ## Companion menu (right-click her)
 - Equipment: 4 armor slots + 1 weapon slot (no other storage).
