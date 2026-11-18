@@ -1,4 +1,4 @@
-"""A practice file for "moving" eyes on the blank girl rig, the way the Linky Playz short does them: each eye is a
+"""Moving eyes for the experiments file (or any rig with an "eyes" group), the way the Linky Playz short does them: each eye is a
 white plane on the face with a pupil plane just in front of it. The pupil is its own bone, so it slides around
 inside the white and grows or shrinks; the whole eye squashes flat to blink. The planes are geometry, not face
 pixels, so they can sit between pixels and move smoothly, and they get their own finer texture (4 per pixel).
@@ -15,11 +15,12 @@ from bbtools import Project, uid
 
 src, dst = sys.argv[1:3]
 p = Project(src)
-old = p.tex
-p.tex = Image.new('RGBA', (128, 128), (0, 0, 0, 0))
-p.tex.paste(old, (0, 0))
-p.m['resolution'] = {'width': 128, 'height': 128}
-p.m['textures'][0].update({'width': 128, 'height': 128, 'uv_width': 128, 'uv_height': 128})
+if p.tex.size[0] < 128:   # room for the eyes' own patches
+    old = p.tex
+    p.tex = Image.new('RGBA', (128, 128), (0, 0, 0, 0))
+    p.tex.paste(old, (0, 0))
+    p.m['resolution'] = {'width': 128, 'height': 128}
+    p.m['textures'][0].update({'width': 128, 'height': 128, 'uv_width': 128, 'uv_height': 128})
 d = ImageDraw.Draw(p.tex)
 
 FACE_Z, EYE_Y, EYE_X = -4.0, 27.0, 1.9      # front of the face, eye line, how far each eye sits from the middle
@@ -27,14 +28,13 @@ WHITE_W, WHITE_H = 2.6, 2.0                  # the white, in pixels
 PUPIL_W, PUPIL_H = 1.0, 1.4                  # the pupil: taller than wide
 
 # white: 12 x 8, pale blue along the top (the shadow of the upper lid), white below
-WU, WV = 64, 0
+WU, WV = p.free_spot(12, 8, start_row=0)
 d.rectangle([WU, WV, WU + 11, WV + 7], fill=(250, 252, 255, 255))
 d.rectangle([WU, WV, WU + 11, WV + 1], fill=(196, 214, 240, 255))
-# pupil: 4 x 6, dark at the top fading lighter toward the bottom, a little shine
-PU, PV = 78, 0
+# pupil: 4 x 6, dark at the top fading lighter toward the bottom (no shine)
+PU, PV = p.free_spot(4, 6, start_row=0)
 for row, col in enumerate([(22, 48, 30), (30, 62, 38), (40, 80, 48), (52, 100, 60), (64, 120, 72), (70, 132, 80)]):
     d.line([PU, PV + row, PU + 3, PV + row], fill=col + (255,))
-d.point((PU + 1, PV + 1), fill=(230, 240, 230, 255))
 
 eyes = p.nodes['eyes']
 made = {}

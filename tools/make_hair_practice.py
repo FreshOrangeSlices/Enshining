@@ -78,7 +78,7 @@ for row in range(H):
     d.line([U + left, V + row, U + left + width - 1, V + row], fill=col)
 d.point((U + 2, V + 2), fill=SHINE)
 cards = p.group('hair_3_plane_locks', 'hair', origin=(0, 31, -4.5))
-for i, (x, roll, length) in enumerate(((-2.2, 14, 4.6), (0.0, -4, 5.0), (2.2, -16, 4.4))):
+for i, (x, roll, length) in enumerate(((-2.2, 14, 2.9), (0.0, -4, 3.2), (2.2, -16, 2.7))):   # end above the eyes
     uv = (U, V, U + W, V + H)
     p.cube(cards, f'bang_{i + 1}', (x - 1.5, 31.5 - length, -4.6), (x + 1.5, 31.5, -4.6), (x, 31.5, -4.6),
            (12, 0, roll), faces={'north': uv, 'south': (uv[2], uv[1], uv[0], uv[3])})   # tips lean out from the face
