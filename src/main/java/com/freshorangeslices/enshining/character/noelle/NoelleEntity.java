@@ -67,6 +67,12 @@ public class NoelleEntity extends CompanionEntity {
 			new ComboHit("animation.noelle.attack3", 0.8333, 0.6667, 0.6667),
 			new ComboHit("animation.noelle.attack4", 0.75, 0.625, 0.625));
 	private static final RawAnimation COMBO_END = RawAnimation.begin().thenPlay("animation.noelle.combo_end");
+	/**
+	 * Her charged attack ("animation.noelle.charged"), every second combo in place of starting over: switched on once
+	 * it's animated (its length and the moments it hits come from the animation).
+	 */
+	@javax.annotation.Nullable
+	private static final ComboHit CHARGED = null;
 
 	private int shieldTicks;
 	private int burstTicks;
@@ -266,7 +272,15 @@ public class NoelleEntity extends CompanionEntity {
 	 */
 	@Override
 	protected double cleaveArc(int hit) {
+		if (hit >= COMBO.size()) {
+			return 360;   // the charged attack spins all the way round
+		}
 		return burstActive() ? 0 : lastHit(hit) ? 50 : 150;
+	}
+
+	@Override
+	protected ComboHit chargedHit() {
+		return CHARGED;
 	}
 
 	/** Her last, downward hit lands one harder. */

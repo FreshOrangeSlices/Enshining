@@ -44,6 +44,13 @@ Nothing here is built yet unless marked done. Order is roughly the order we'll d
   sweeps 180 degrees in front of her (right to left over 0.2 s), 6 blocks out.
 - Combo: her last, downward hit does 1 more damage and only catches what's in a 50-degree slice ahead (a third of
   the others' 150).
+- Charged attack (code ready, off): `animation.noelle.charged`, every second combo in place of starting over when
+  an enemy is still in reach after the last hit, hitting all round her. Switched on (with its length and hit
+  moments) once it's animated.
+- Lighting in the world: flat sheets (eyes, straps, panels) are lit as the side you see, like any face (GeckoLib's
+  own rule made her eyes glow against her face whenever you looked down at her); and her faces are lit softly
+  (normals tipped halfway to the sky): front faces ~0.92 bright instead of ~0.74, sides ~0.83 instead of ~0.59.
+  The menu portrait keeps its own lighting.
 - `flow_` bones: sway on top of the rest pose (or the animation's key), never on top of last frame's sway (that
   added up into the bows spinning). Blinks: 4 ticks while moving or fighting, the slow 7 when standing still.
 - v8 model: skirt and everything in `waist_extras` 2 px higher, hovering claymore 2 px higher, the mini shield's

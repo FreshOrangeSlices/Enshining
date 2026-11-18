@@ -73,6 +73,15 @@ public class CompanionRenderer<T extends CompanionEntity> extends GeoEntityRende
 	private final Vector3f rideDir = new Vector3f();
 	/** The skirt's motion this frame: front swing, back swing, flare, twist (radians, already limited). */
 	private final float[] motion = new float[4];
+	/**
+	 * In the world (not the menu portrait): her faces are lit softly, each normal tipped halfway toward the sky, so
+	 * her front reads about as bright as Genshin's flat shading instead of Minecraft's harsh grey (a mostly white
+	 * outfit goes dull grey otherwise). worldUp is the sky's direction in the camera's space this frame.
+	 */
+	private static final float SOFT_LIGHT = 0.5F;
+	private boolean inWorld;
+	private final Vector3f worldUp = new Vector3f(0, 1, 0);
+	private final Vector4f cornerScratch = new Vector4f();
 	private final Map<ResourceLocation, Optional<ResourceLocation>> skirtTextures = new HashMap<>();
 	@Nullable
 	private BakedGeoModel ringModel;
@@ -215,6 +224,11 @@ public class CompanionRenderer<T extends CompanionEntity> extends GeoEntityRende
 			}
 			model.getBone("weapon_back").ifPresent(b -> bladeBones(b, backBlade));
 		}
+		inWorld = companion.level().getEntity(companion.getId()) == companion;
+		if (inWorld) {
+			float pitch = Minecraft.getInstance().gameRenderer.getMainCamera().getXRot() * Mth.DEG_TO_RAD;
+			worldUp.set(0.0F, Mth.cos(pitch), Mth.sin(pitch));
+		}
 		super.actuallyRender(poseStack, companion, model, renderType, bufferSource, buffer, isReRender, partialTick, packedLight,
 				packedOverlay, red, green, blue, alpha);
 		// The sparkle, in the world only (not for the menu's portrait copy), from where the blade was just drawn.
@@ -325,6 +339,47 @@ public class CompanionRenderer<T extends CompanionEntity> extends GeoEntityRende
 			if (ride) {
 				riding = false;
 			}
+		}
+	}
+
+	/**
+	 * GeckoLib's own cube drawing, with its lighting of flat (zero-thickness) cubes replaced in the world: it forces
+	 * their normals to point one way in the camera's space, so a sheet like her eyes caught more light than the face
+	 * right behind it whenever you looked down at her (the eyes "glowed"). Here a flat cube's face is lit as the side
+	 * you're looking at, like any other face, and every face gets the soft light above. The menu keeps GeckoLib's.
+	 */
+	@Override
+	public void renderCube(PoseStack poseStack, GeoCube cube, VertexConsumer buffer, int packedLight, int packedOverlay,
+			float red, float green, float blue, float alpha) {
+		RenderUtils.translateToPivotPoint(poseStack, cube);
+		RenderUtils.rotateMatrixAroundCube(poseStack, cube);
+		RenderUtils.translateAwayFromPivotPoint(poseStack, cube);
+		Matrix3f normalState = poseStack.last().normal();
+		Matrix4f poseState = poseStack.last().pose();
+		Vec3 size = cube.size();
+		boolean flat = size.x() == 0 || size.y() == 0 || size.z() == 0;
+		for (GeoQuad quad : cube.quads()) {
+			if (quad == null) {
+				continue;
+			}
+			Vector3f normal = normalState.transform(new Vector3f(quad.normal()));
+			if (!inWorld) {
+				RenderUtils.fixInvertedFlatCube(cube, normal);
+			} else {
+				if (flat) {
+					Vector3f corner = quad.vertices()[0].position();
+					poseState.transform(cornerScratch.set(corner.x(), corner.y(), corner.z(), 1.0F));
+					// The camera is at the origin: a normal pointing away from it is the far side's; turn it round.
+					if (normal.x() * cornerScratch.x() + normal.y() * cornerScratch.y() + normal.z() * cornerScratch.z() > 0) {
+						normal.negate();
+					}
+				}
+				normal.add(worldUp.x() * SOFT_LIGHT, worldUp.y() * SOFT_LIGHT, worldUp.z() * SOFT_LIGHT);
+				if (normal.lengthSquared() > 1.0E-6F) {
+					normal.normalize();
+				}
+			}
+			createVerticesOfQuad(quad, poseState, normal, buffer, packedLight, packedOverlay, red, green, blue, alpha);
 		}
 	}
 

@@ -86,6 +86,8 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 	/** The combo, packed: (count of hits started << 3) | phase. Phase 0 = none, 1..n = combo hit n, 7 = the ending. */
 	private static final EntityDataAccessor<Integer> COMBO = SynchedEntityData.defineId(CompanionEntity.class, EntityDataSerializers.INT);
 	private static final int COMBO_END_PHASE = 7;
+	/** The charged attack's phase (combos have at most 5 hits). */
+	private static final int CHARGED_PHASE = 6;
 	/** How long (ticks) she lingers on a combo hit's last frame waiting for the next one before the combo resets. */
 	private static final int COMBO_WINDOW_TICKS = 20;
 	public static final int ACTION_NONE = 0;
@@ -114,7 +116,8 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 	private int actionShown;     // client side: the skill or burst the animation was last started for
 	// Combo, server side
 	private int comboNext;        // which hit comes next (0-based)
-	private int comboHitIndex;    // which hit is playing (0-based)
+	private int comboHitIndex;    // which hit is playing (0-based; the charged attack is one past the last hit)
+	private int combosFinished;   // combos played to their last hit, for the charged attack's turn
 	private int comboCount;       // hits started, so clients can tell a new hit from the same one
 	private int comboPieceTicks;  // ticks left in the hit being played
 	private int comboWindowTicks; // ticks left to continue the combo after a hit
@@ -198,6 +201,20 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 	@Nullable
 	protected RawAnimation comboEndAnimation() {
 		return null;
+	}
+
+	/**
+	 * The charged attack (null: none), played every {@link #chargedEvery()}th combo in place of starting over when
+	 * an enemy is still in reach after the last hit. Its arc and bonus come from {@link #cleaveArc(int)} and
+	 * {@link #comboBonusDamage(int)} with the hit number one past the last.
+	 */
+	@Nullable
+	protected ComboHit chargedHit() {
+		return null;
+	}
+
+	protected int chargedEvery() {
+		return 2;
 	}
 
 	protected double comboEndLength() {
@@ -463,9 +480,17 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 	public void startComboHit(LivingEntity target) {
 		List<ComboHit> hits = comboHits();
 		int index = comboNext;
-		ComboHit hit = hits.get(index);
-		comboHitIndex = index;
 		comboNext = (index + 1) % hits.size();
+		startPiece(hits.get(index), index, index + 1, target);
+	}
+
+	/** The charged attack on this target (after the combo's last hit, the combo then starts over). */
+	private void startCharged(LivingEntity target) {
+		startPiece(chargedHit(), comboHits().size(), CHARGED_PHASE, target);
+	}
+
+	private void startPiece(ComboHit hit, int index, int phase, LivingEntity target) {
+		comboHitIndex = index;
 		comboCount = (comboCount + 1) & 0xFFFFF;
 		comboPieceTicks = comboTicks(hit.length());
 		comboImpacts = new int[hit.impacts().length];
@@ -489,7 +514,7 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 		comboAimYaw = (float) (Mth.atan2(dz, dx) * Mth.RAD_TO_DEG) - 90.0F;
 		comboYaw = yBodyRot;
 		lockFacing();
-		entityData.set(COMBO, comboCount << 3 | (index + 1));
+		entityData.set(COMBO, comboCount << 3 | phase);
 	}
 
 	private void lockFacing() {
@@ -572,7 +597,16 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 		}
 		if (comboPieceTicks > 0 && --comboPieceTicks == 0) {
 			LivingEntity next = comboFoe(0.0);
-			if (next != null && action() == ACTION_NONE) {
+			boolean lastHit = comboNext == 0 && comboHitIndex == comboHits().size() - 1;
+			if (lastHit) {
+				combosFinished++;
+			}
+			if (next != null && action() == ACTION_NONE && lastHit && chargedHit() != null
+					&& combosFinished % Math.max(1, chargedEvery()) == 0) {
+				// Every so often, still facing someone after the last hit: the charged attack instead of starting over.
+				setTarget(next);
+				startCharged(next);
+			} else if (next != null && action() == ACTION_NONE) {
 				// Something's still in reach: straight into the next hit (after the finisher, back to hit 1), no idling.
 				setTarget(next);
 				startComboHit(next);
@@ -1225,7 +1259,10 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 			comboSeen = count;
 			return null;
 		}
-		RawAnimation animation = phase == COMBO_END_PHASE ? comboEndAnimation() : comboHits().get(Math.min(phase, comboHits().size()) - 1).animation();
+		ComboHit charged = chargedHit();
+		RawAnimation animation = phase == COMBO_END_PHASE ? comboEndAnimation()
+				: phase == CHARGED_PHASE ? (charged == null ? null : charged.animation())
+				: comboHits().get(Math.min(phase, comboHits().size()) - 1).animation();
 		if (animation == null) {
 			return null;
 		}
