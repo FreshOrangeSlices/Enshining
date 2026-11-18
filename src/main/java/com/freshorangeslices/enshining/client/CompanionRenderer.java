@@ -223,7 +223,7 @@ public class CompanionRenderer<T extends CompanionEntity> extends GeoEntityRende
 				companion.eyeHeadMatrix = new org.joml.Matrix4f(headBone.getWorldSpaceMatrix());
 			}
 			float frame = Minecraft.getInstance().getDeltaFrameTime();
-			if (companion.handWeaponIn > 0 && companion.handWeaponIn < 1) {
+			if (companion.handWeaponSpark > 0 || companion.handWeaponIn > 0 && companion.handWeaponIn < 1) {
 				sparkle(companion, handBlade, frame, companion.handWeaponWanted);
 			}
 			if (companion.backWeaponIn > 0 && companion.backWeaponIn < 1) {

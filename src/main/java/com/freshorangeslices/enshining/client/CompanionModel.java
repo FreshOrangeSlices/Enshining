@@ -52,8 +52,11 @@ public class CompanionModel<T extends CompanionEntity> extends DefaultedEntityGe
 		// for 3s after) the head follows the animation only; otherwise the look is added on top, limited so the
 		// two together never twist her neck past what a person could.
 		CoreGeoBone head = getAnimationProcessor().getBone("head");
+		Set<String> animated = animatedBones(state);
 		float animX = 0, animY = 0;
-		if (head != null) {
+		// Only a keyed head carries the animation's turn: otherwise it still holds last frame's look (GeckoLib leaves
+		// bones the model code moved alone), which would add onto itself every frame.
+		if (head != null && animated.contains("head")) {
 			animX = head.getRotX() - head.getInitialSnapshot().getRotX();
 			animY = head.getRotY() - head.getInitialSnapshot().getRotY();
 		}
@@ -69,7 +72,6 @@ public class CompanionModel<T extends CompanionEntity> extends DefaultedEntityGe
 			head.setRotX(baseX + animX + limitLook(lookX, animX, 0.7F));
 			head.setRotY(baseY + animY + limitLook(lookY, animY, 1.3F));
 		}
-		Set<String> animated = animatedBones(state);
 		weapons(companion, state, animated);
 		vanillaLimbs(companion, state, animated);
 
@@ -86,7 +88,7 @@ public class CompanionModel<T extends CompanionEntity> extends DefaultedEntityGe
 		skirtRing(companion, time, state.getPartialTick());
 		eyes(companion, time);
 		EyeRig.apply(this, companion, time, state.getPartialTick(), expression(companion, time));   // experiments only
-		flow(companion, state, time, swing, amount);
+		flow(companion, state, time, swing, amount, animated);
 		// Armor pieces of the rig stay hidden until armor drawing is in.
 		for (CoreGeoBone bone : getAnimationProcessor().getRegisteredBones()) {
 			if (bone.getName().startsWith("armor_")) {
@@ -112,9 +114,15 @@ public class CompanionModel<T extends CompanionEntity> extends DefaultedEntityGe
 		boolean shown = companion.setting(CompanionEntity.SHOW_WEAPON);
 		boolean hand = shown && companion.showsWeaponInHand() && !companion.holdsSwappedWeapon();
 		boolean back = shown && companion.showBackWeapon();
+		// In her hand it's there at once (any grow-in reads as a delay at the start of a swing); the sparkle still
+		// plays over it for a moment. It still fades away over 0.2 s when she's done.
+		if (hand && !companion.handWeaponWanted && !snap) {
+			companion.handWeaponSpark = 5.0F;
+		}
+		companion.handWeaponSpark = Math.max(0.0F, companion.handWeaponSpark - Math.max(0.0F, dt));
 		companion.handWeaponWanted = hand;
 		companion.backWeaponWanted = back;
-		companion.handWeaponIn = snap ? (hand ? 1 : 0) : Mth.approach(companion.handWeaponIn, hand ? 1 : 0, dt / (hand ? 3.0F : 4.0F));
+		companion.handWeaponIn = hand || snap ? (hand ? 1 : 0) : Mth.approach(companion.handWeaponIn, 0, dt / 4.0F);
 		companion.backWeaponIn = snap ? (back ? 1 : 0) : Mth.approach(companion.backWeaponIn, back ? 1 : 0, dt / (back ? 6.0F : 4.0F));
 
 		CoreGeoBone weapon = getAnimationProcessor().getBone("weapon");
@@ -207,20 +215,26 @@ public class CompanionModel<T extends CompanionEntity> extends DefaultedEntityGe
 		}
 		if (sat > 0) {
 			float drowsy = 0.2F + 0.6F * sat / 600.0F;                  // more of each 8 seconds spent dozing
-			return phase < drowsy * 160 ? HALF : blink(companion.getId(), time);
+			return phase < drowsy * 160 ? HALF : blink(companion.getId(), time, false);
 		}
-		return blink(companion.getId(), time);
+		boolean busy = companion.inCombat() || companion.getDeltaMovement().horizontalDistanceSqr() > 0.0004;
+		return blink(companion.getId(), time, busy);
 	}
 
-	/** Where a blink is at: one blink per 90-tick stretch, starting somewhere in its first 60 ticks; 7 ticks long. */
-	private static int blink(int id, float time) {
+	/**
+	 * Where a blink is at: one blink per 90-tick stretch, starting somewhere in its first 60 ticks. Standing still
+	 * it's slow and soft (7 ticks: half, shut, half); moving or fighting, quicker (4 ticks).
+	 */
+	private static int blink(int id, float time, boolean quick) {
 		int stretch = Mth.floor(time / 90.0F);
 		long seed = id * 341873128712L + stretch * 132897987541L;
 		float t = time - (stretch * 90.0F + Math.floorMod(seed ^ (seed >>> 17), 60));
-		if (t < 0 || t >= 7) {
+		int length = quick ? 4 : 7;
+		int half = quick ? 1 : 2;
+		if (t < 0 || t >= length) {
 			return 0;
 		}
-		return t < 2 || t >= 5 ? 1 : 2;
+		return t < half || t >= length - half ? 1 : 2;
 	}
 
 	/** Whether a bone, or anything under it, has cubes to show. */
@@ -327,7 +341,7 @@ public class CompanionModel<T extends CompanionEntity> extends DefaultedEntityGe
 	 * swings out when she turns, and drifts a little when still. A flow bone inside another flow bone moves a beat
 	 * later and a bit more, so chains (flow_ribbon > flow_ribbon_tip) ripple.
 	 */
-	private void flow(T companion, AnimationState<T> state, float time, float swing, float amount) {
+	private void flow(T companion, AnimationState<T> state, float time, float swing, float amount, Set<String> animated) {
 		float fall = Mth.clamp((float) -companion.getDeltaMovement().y * 1.2F, -0.15F, 0.4F);
 		float turn = Mth.clamp(Mth.wrapDegrees(companion.yBodyRot - companion.yBodyRotO) * -0.02F, -0.35F, 0.35F);
 		float speed = Mth.clamp(amount * (companion.isSprinting() ? 0.35F : 0.18F), 0.0F, 0.4F);
@@ -348,8 +362,16 @@ public class CompanionModel<T extends CompanionEntity> extends DefaultedEntityGe
 					+ (float) Math.sin(swing * 0.6662F - lag) * amount * 0.06F
 					+ (float) Math.sin(time * 0.07F + phase - lag) * 0.035F;
 			float z = turn + (float) Math.sin(time * 0.05F + phase - lag) * 0.03F;
-			bone.setRotX(bone.getRotX() + Mth.clamp(x * more, -0.3F, 0.8F));
-			bone.setRotZ(bone.getRotZ() + Mth.clamp(z * more, -0.5F, 0.5F));
+			// On top of the animation's own key if it has one, else on top of the rest pose: never on top of last
+			// frame's sway (GeckoLib doesn't reset a bone this code moved, so that would add up into a spin).
+			boolean keyed = animated.contains(bone.getName());
+			float baseX = keyed ? bone.getRotX() : bone.getInitialSnapshot().getRotX();
+			float baseZ = keyed ? bone.getRotZ() : bone.getInitialSnapshot().getRotZ();
+			if (!keyed) {
+				bone.setRotY(bone.getInitialSnapshot().getRotY());
+			}
+			bone.setRotX(baseX + Mth.clamp(x * more, -0.3F, 0.8F));
+			bone.setRotZ(baseZ + Mth.clamp(z * more, -0.5F, 0.5F));
 		}
 	}
 

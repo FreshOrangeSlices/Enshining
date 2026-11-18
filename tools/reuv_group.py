@@ -7,9 +7,10 @@ detail), laid out like Minecraft's box layout for each cube:
 Each new face starts with what that face showed before (scaled up), so nothing changes in-game until you paint it.
 Groups inside it can be left where they are with --keep (e.g. something that already has its own pixels).
 
-usage: reuv_group.py in.bbmodel out.bbmodel GROUP DENSITY [--row=N] [--keep=GROUP,GROUP]
+usage: reuv_group.py in.bbmodel out.bbmodel GROUP DENSITY [--row=N] [--keep=GROUP,GROUP] [--front=WxH]
   DENSITY  texture pixels per model pixel (3 = three times the detail of the 1:1 skin)
   --row    the first texture row to look for free space from (default 0)
+  --front  instead of DENSITY: each cube's front gets exactly W x H pixels (sides and depth follow the width's scale)
 """
 import math, sys
 
@@ -19,7 +20,8 @@ from bbtools import Project
 
 args = [a for a in sys.argv[1:] if not a.startswith('--')]
 opts = dict(a[2:].split('=', 1) for a in sys.argv[1:] if a.startswith('--'))
-src, dst, group, density = args[0], args[1], args[2], float(args[3])
+src, dst, group = args[0], args[1], args[2]
+density = float(args[3]) if len(args) > 3 else 1.0
 row = int(opts.get('row', 0))
 keep = set(filter(None, opts.get('keep', '').split(',')))
 
@@ -53,8 +55,14 @@ def patch(face):
 
 
 report = []
+front = tuple(int(v) for v in opts['front'].split('x')) if 'front' in opts else None
 for e in cubes(P.nodes[group], keep):
-    w, h, d = (round(abs(e['to'][i] - e['from'][i]) * density) for i in range(3))
+    size = [abs(e['to'][i] - e['from'][i]) for i in range(3)]
+    if front:
+        dx, dy = front[0] / size[0], front[1] / size[1]
+        w, h, d = front[0], front[1], round(size[2] * dx)
+    else:
+        w, h, d = (round(v * density) for v in size)
     W, H = 2 * (d + w), d + h
     U, V = P.free_spot(W, H, start_row=row)
     layout = {'up': (U + d, V, w, d), 'down': (U + d + w, V, w, d), 'east': (U, V + d, d, h),

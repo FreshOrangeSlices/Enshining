@@ -143,13 +143,18 @@ public final class CompanionGameTests {
 	@GameTest(template = "empty")
 	public static void breastplateShieldsHer(GameTestHelper helper) {
 		NoelleEntity noelle = noelle(helper);
-		Zombie zombie = helper.spawn(EntityType.ZOMBIE, new BlockPos(3, 2, 3));
+		// Right beside her: Breastplate reaches half as far as her claymore.
+		Zombie zombie = helper.spawn(EntityType.ZOMBIE, new BlockPos(3, 2, 2));
 		zombie.setNoAi(true);
 		// A few ticks in: on a lagging test server, entities spawned this tick may not be findable yet.
 		helper.runAfterDelay(5, () -> {
 			noelle.useSkill(zombie);
 			helper.assertTrue(noelle.shieldActive(), "The shield is up");
 			helper.assertTrue(noelle.getAbsorptionAmount() > 0, "Absorption from Breastplate: " + noelle.getAbsorptionAmount());
+			helper.assertTrue(zombie.getHealth() == zombie.getMaxHealth(), "No damage on the first frame: it lands with the animation");
+			for (int i = 0; i < 6; i++) {
+				noelle.tickAbilitiesForTests();
+			}
 			helper.assertTrue(zombie.getHealth() < zombie.getMaxHealth(), "The stone armor bursting out hurt the zombie next to her: health "
 					+ zombie.getHealth() + "/" + zombie.getMaxHealth() + ", distance " + Math.sqrt(noelle.distanceToSqr(zombie)));
 			helper.succeed();
@@ -167,6 +172,30 @@ public final class CompanionGameTests {
 		helper.assertTrue(noelle.meleeReachScale() == 2.0, "Her reach doubles");
 		helper.assertTrue(noelle.getAttributeValue(Attributes.ATTACK_DAMAGE) == before + 4.0, "Half her 8 armor as attack");
 		helper.succeed();
+	}
+
+	@GameTest(template = "empty")
+	public static void sweepingTimeSwingsInFrontOnTheBeat(GameTestHelper helper) {
+		NoelleEntity noelle = helper.spawn(ModEntities.NOELLE.get(), new BlockPos(4, 2, 1));
+		noelle.setNoAi(true);
+		noelle.setYRot(0.0F);   // facing +z
+		noelle.setYBodyRot(0.0F);
+		Zombie front = helper.spawn(EntityType.ZOMBIE, new BlockPos(4, 2, 6));   // 5 blocks ahead
+		Zombie behind = helper.spawn(EntityType.ZOMBIE, new BlockPos(4, 2, 0));
+		front.setNoAi(true);
+		behind.setNoAi(true);
+		helper.runAfterDelay(5, () -> {
+			noelle.setYBodyRot(0.0F);
+			noelle.useBurst(front);
+			helper.assertTrue(front.getHealth() == front.getMaxHealth(), "No damage at the cast: the swing lands with the animation");
+			for (int i = 0; i < 24; i++) {
+				noelle.tickAbilitiesForTests();
+			}
+			helper.assertTrue(front.getHealth() < front.getMaxHealth(), "The 180-degree swing reached 5 blocks ahead: health "
+					+ front.getHealth() + ", distance " + Math.sqrt(noelle.distanceToSqr(front)) + ", facing " + noelle.yBodyRot);
+			helper.assertTrue(behind.getHealth() == behind.getMaxHealth(), "Nothing behind her");
+			helper.succeed();
+		});
 	}
 
 	@GameTest(template = "empty", timeoutTicks = 200)

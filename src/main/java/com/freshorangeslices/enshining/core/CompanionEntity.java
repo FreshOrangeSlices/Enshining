@@ -79,6 +79,10 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 	public static final int SHOW_ARMOR = 1, SHOW_WEAPON = 2, SKILL_ON = 4, BURST_ON = 8;
 	private static final int DEFAULT_SETTINGS = SHOW_ARMOR | SHOW_WEAPON | SKILL_ON | BURST_ON;
 	private static final UUID WEAPON_SWAP = UUID.fromString("5e3b1c2a-7d41-4c55-9a0e-0e1a1f000004");
+	/** Half speed while her burst plays. */
+	private static final UUID BURST_SLOW = UUID.fromString("5e3b1c2a-7d41-4c55-9a0e-0e1a1f000005");
+	/** A combo hit's extra damage (see {@link #comboBonusDamage}), on only while that hit lands. */
+	private static final UUID COMBO_BONUS = UUID.fromString("5e3b1c2a-7d41-4c55-9a0e-0e1a1f000006");
 	/** The combo, packed: (count of hits started << 3) | phase. Phase 0 = none, 1..n = combo hit n, 7 = the ending. */
 	private static final EntityDataAccessor<Integer> COMBO = SynchedEntityData.defineId(CompanionEntity.class, EntityDataSerializers.INT);
 	private static final int COMBO_END_PHASE = 7;
@@ -107,8 +111,10 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 	private int combatTicks;
 	private boolean wasSwinging; // client side, to restart the attack animation on each new swing
 	private boolean playingMove; // client side: an attack, skill or burst animation is playing
+	private int actionShown;     // client side: the skill or burst the animation was last started for
 	// Combo, server side
 	private int comboNext;        // which hit comes next (0-based)
+	private int comboHitIndex;    // which hit is playing (0-based)
 	private int comboCount;       // hits started, so clients can tell a new hit from the same one
 	private int comboPieceTicks;  // ticks left in the hit being played
 	private int comboWindowTicks; // ticks left to continue the combo after a hit
@@ -316,6 +322,8 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 	 */
 	public float handWeaponIn, backWeaponIn;
 	public boolean handWeaponWanted, backWeaponWanted;
+	/** Client side: ticks of sparkle left over the claymore just summoned to her hand (it appears at once). */
+	public float handWeaponSpark;
 	public float weaponLastTime = -1.0F;
 	private float lookBlend = 1.0F;  // client side: how much the head looks at things (0 in a fight), eased per tick
 	private float lookBlendO = 1.0F;
@@ -456,6 +464,7 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 		List<ComboHit> hits = comboHits();
 		int index = comboNext;
 		ComboHit hit = hits.get(index);
+		comboHitIndex = index;
 		comboNext = (index + 1) % hits.size();
 		comboCount = (comboCount + 1) & 0xFFFFF;
 		comboPieceTicks = comboTicks(hit.length());
@@ -545,8 +554,19 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 				comboImpactIndex++;
 				LivingEntity target = comboFoe(0.5); // a little give
 				if (target != null) {
-					doHurtTarget(target);
-					cleave(target);
+					var attack = getAttribute(Attributes.ATTACK_DAMAGE);
+					float bonus = comboBonusDamage(comboHitIndex);
+					if (attack != null && bonus != 0) {
+						attack.addTransientModifier(new AttributeModifier(COMBO_BONUS, "Combo hit", bonus, AttributeModifier.Operation.ADDITION));
+					}
+					try {
+						doHurtTarget(target);
+						cleave(target);
+					} finally {
+						if (attack != null) {
+							attack.removeModifier(COMBO_BONUS);
+						}
+					}
 				}
 			}
 		}
@@ -595,9 +615,24 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 		return 0;
 	}
 
+	/** The arc of one hit of the combo (0-based); by default every hit has {@link #cleaveArc()}. */
+	protected double cleaveArc(int hit) {
+		return cleaveArc();
+	}
+
+	/** Extra damage for one hit of the combo (0-based), on top of her attack. */
+	protected float comboBonusDamage(int hit) {
+		return 0;
+	}
+
+	/** Which hit of the combo is playing (0-based), for effects that differ per hit. */
+	protected int comboHitIndex() {
+		return comboHitIndex;
+	}
+
 	/** A swing also catches every other hostile in reach inside its arc (full damage, a little knockback). */
 	private void cleave(LivingEntity primary) {
-		double arc = cleaveArc();
+		double arc = cleaveArc(comboHitIndex);
 		if (arc <= 0) {
 			return;
 		}
@@ -634,6 +669,11 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 		return level().getEntitiesOfClass(Mob.class, getBoundingBox().inflate(reach), mob -> mob instanceof Enemy && mob.isAlive()
 						&& !(mob instanceof TamableAnimal tame && tame.isTame()) && inMeleeReach(mob, give) && canAttack(mob))
 				.stream().min(java.util.Comparator.comparingDouble(this::distanceToSqr)).orElse(null);
+	}
+
+	/** Game tests: one tick of what her AI does for her skill and burst (timed effects), for a companion with no AI. */
+	public void tickAbilitiesForTests() {
+		tickAbilities();
 	}
 
 	/** How long the skill and burst animations last, in ticks (their animation_length times 20). */
@@ -894,6 +934,19 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 		if (actionTicks > 0 && --actionTicks == 0) {
 			entityData.set(ACTION, ACTION_NONE);
 		}
+		// Her skill roots her for its whole animation; her burst lets her move at half speed.
+		if (action() == ACTION_SKILL) {
+			getNavigation().stop();
+			getMoveControl().setWantedPosition(getX(), getY(), getZ(), 0.0);
+		}
+		var speed = getAttribute(Attributes.MOVEMENT_SPEED);
+		boolean slowed = action() == ACTION_BURST;
+		if (speed != null && slowed != (speed.getModifier(BURST_SLOW) != null)) {
+			speed.removeModifier(BURST_SLOW);
+			if (slowed) {
+				speed.addTransientModifier(new AttributeModifier(BURST_SLOW, "Burst", -0.5, AttributeModifier.Operation.MULTIPLY_TOTAL));
+			}
+		}
 		if (getTarget() != null && getTarget().isAlive() || getLastHurtByMob() != null && tickCount - getLastHurtByMobTimestamp() < 60) {
 			combatTicks = 60;
 		} else if (combatTicks > 0) {
@@ -904,7 +957,8 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 		setSprinting(!comboActive && getNavigation().isInProgress() && getMoveControl().getSpeedModifier() >= 1.05);
 
 		LivingEntity target = getTarget();
-		if (target == null || !target.isAlive() || distanceToSqr(target) > 36 || comboPieceTicks > 0) {
+		// One at a time: a skill or burst always plays to its end (nothing cuts in, not even the other one).
+		if (target == null || !target.isAlive() || distanceToSqr(target) > 36 || comboPieceTicks > 0 || actionTicks > 0) {
 			return;
 		}
 		if (setting(BURST_ON) && energy >= burstCost()) {
@@ -1054,12 +1108,17 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 			}
 			int action = action();
 			playingMove = true;
-			if (action == ACTION_BURST) {
-				return state.setAndContinue(burstAnimation());
+			if (action != ACTION_NONE) {
+				if (action != actionShown) {
+					// A new skill or burst: from its first frame, at its own speed, with a short blend in.
+					actionShown = action;
+					state.getController().setAnimationSpeed(1.0);
+					state.getController().setTransitionLength(2);
+					state.getController().forceAnimationReset();
+				}
+				return state.setAndContinue(action == ACTION_BURST ? burstAnimation() : skillAnimation());
 			}
-			if (action == ACTION_SKILL) {
-				return state.setAndContinue(skillAnimation());
-			}
+			actionShown = ACTION_NONE;
 			if (!comboHits().isEmpty()) {
 				PlayState combo = comboState(state);
 				if (combo != null) {

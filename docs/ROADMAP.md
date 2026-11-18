@@ -32,10 +32,22 @@ Nothing here is built yet unless marked done. Order is roughly the order we'll d
   (closed). Shut while hurt and in the menu's armor pose.
 - Menu poses done: `menu_weapon` (draws the claymore) and `menu_armor`. Each plays its start once, then repeats
   the rest (`tools/pose_loops.py`, easing back to the loop's start): armor loops from 0.42 s, weapon from 0.96 s.
-  Zooming back out is slower (in fast, out slow) and she relaxes back to idle over 0.8 s.
-- Weapons appear and vanish by magic (code): the claymore grows in over 0.15 s and shrinks away over 0.2 s, the
-  hovering one floats down into place, with specks of her element's colour and little falling sparks scattered
-  over the blade's own cubes while it does (in the world; not in the menu yet).
+  Zooming back out is slower (in fast, out slow) and she relaxes back to idle over 0.8 s. A close-up stays 4 s
+  after you stop hovering its slot, 6.5 s after you equip something; posing, she stops following the cursor.
+- Weapons appear and vanish by magic (code): the claymore is in her hand at once (a grow-in read as a delay at the
+  start of a swing) with a quarter-second of sparkle over it, and shrinks away over 0.2 s; the hovering one floats
+  down into place. Specks of her element's colour and little falling sparks scattered over the blade's own cubes
+  (in the world; not in the menu yet).
+- Skill and burst (code): one at a time, each plays to its end (before, the next tick could start the other on top:
+  the burst got skipped, the skill cut off). Skill: she stands still for the whole animation; stone bursts out all
+  round her at half her claymore's reach, 0.25 s in. Burst: she can walk at half speed; 0.9 s in her claymore
+  sweeps 180 degrees in front of her (right to left over 0.2 s), 6 blocks out.
+- Combo: her last, downward hit does 1 more damage and only catches what's in a 50-degree slice ahead (a third of
+  the others' 150).
+- `flow_` bones: sway on top of the rest pose (or the animation's key), never on top of last frame's sway (that
+  added up into the bows spinning). Blinks: 4 ticks while moving or fighting, the slow 7 when standing still.
+- v8 model: skirt and everything in `waist_extras` 2 px higher, hovering claymore 2 px higher, the mini shield's
+  own 5x7 faces (rows 230-236 at the right edge; a plain grey placeholder, it had no paint).
 - Painting map: `docs/art/noelle/uv_guide.png` (labelled) and `uv_template.png` (guide layer), made by
   `tools/make_uv_guide.py`. The chest plate (bust) has its own pixels on every face now.
 - Extra idles (code done): animations named `animation.companion.idle_<anything>` (or `animation.noelle.idle_...`)

@@ -8,6 +8,7 @@ import com.freshorangeslices.enshining.core.Fx;
 import net.minecraft.network.syncher.EntityDataAccessor;
 import net.minecraft.network.syncher.EntityDataSerializers;
 import net.minecraft.network.syncher.SynchedEntityData;
+import net.minecraft.util.Mth;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.phys.Vec3;
 import java.util.UUID;
@@ -33,13 +34,23 @@ import software.bernie.geckolib.core.animation.RawAnimation;
 /**
  * Noelle, the Geo maid knight with a claymore.
  * <ul>
- * <li>Skill, Breastplate: a Geo shield (absorption) on her and her owner; while it lasts, her hits may heal them both.</li>
- * <li>Burst, Sweeping Time: for 15 seconds her armor turns into attack and her swings hit everything around the target.</li>
+ * <li>Skill, Breastplate: she stands her ground while stone bursts out all round her (half her claymore's reach) and
+ * shields her and her owner (absorption); while it lasts, her hits may heal them both.</li>
+ * <li>Burst, Sweeping Time: one huge 180-degree swing in front of her on the animation's beat (she can walk at half
+ * speed through it), then for 15 seconds her armor turns into attack and her swings hit everything around the
+ * target.</li>
  * </ul>
  */
 public class NoelleEntity extends CompanionEntity {
 	public static final int SHIELD_TICKS = 240;
 	public static final int BURST_TICKS = 300;
+	/**
+	 * On the animations' beats: the skill's stone armor bursts out as she plants (0.25 s in); the burst's big swing
+	 * starts 0.9 s in and sweeps across 180 degrees in front of her over 0.2 s, as the claymore goes through.
+	 */
+	private static final int SKILL_BLAST_TICKS = 5, BURST_SWING_TICKS = 18, SWING_STEPS = 4;
+	/** How far the burst's swing reaches (blocks from her middle to the enemy's edge): her claymore at its biggest. */
+	private static final double BURST_SWING_REACH = 6.0;
 
 	private static final UUID BURST_ATTACK = UUID.fromString("5e3b1c2a-7d41-4c55-9a0e-0e1a1f000101");
 	private static final EntityDataAccessor<Boolean> SWEEPING = SynchedEntityData.defineId(NoelleEntity.class, EntityDataSerializers.BOOLEAN);
@@ -59,6 +70,10 @@ public class NoelleEntity extends CompanionEntity {
 
 	private int shieldTicks;
 	private int burstTicks;
+	private int skillBlastIn = -1;
+	private int burstSwingIn = -1;
+	private int swingStep = -1;
+	private final java.util.Set<UUID> swingHit = new java.util.HashSet<>();
 
 	public NoelleEntity(EntityType<? extends TamableAnimal> type, Level level) {
 		super(type, level);
@@ -123,12 +138,24 @@ public class NoelleEntity extends CompanionEntity {
 		if (owner != null && owner.distanceToSqr(this) < 16 * 16) {
 			shield(owner);
 		}
-		geoBlast(3.0, 2.0F + (float) getAttributeValue(Attributes.ARMOR) * 0.4F);
-		if (level() instanceof ServerLevel server) {
-			Fx.shards(server, Blocks.GOLD_BLOCK.defaultBlockState(), position().add(0, 0.6, 0), 40, 0.8);
-			Fx.ring(server, element().dust(), position().add(0, 0.1, 0), 3.0, 48);
-		}
 		sound(SoundEvents.SHIELD_BLOCK, 1.0F, 0.7F);
+		skillBlastIn = SKILL_BLAST_TICKS;   // the stone bursts out on the animation's beat, not at the first frame
+	}
+
+	/** All the way round her, at half her claymore's reach: not a swing, the stone bursting out of her. */
+	private void skillBlast() {
+		double reach = meleeReach() * 0.5;
+		float damage = 2.0F + (float) getAttributeValue(Attributes.ARMOR) * 0.4F;
+		for (LivingEntity near : level().getEntitiesOfClass(LivingEntity.class, getBoundingBox().inflate(reach + 1.0, 1.0, reach + 1.0),
+				e -> e != this && e instanceof Enemy && e.isAlive() && !(e instanceof TamableAnimal pet && pet.isTame())
+						&& Math.sqrt(e.distanceToSqr(getX(), e.getY(), getZ())) <= reach + e.getBbWidth() / 2.0)) {
+			near.hurt(damageSources().mobAttack(this), damage);
+		}
+		if (level() instanceof ServerLevel server) {
+			Fx.shards(server, Blocks.GOLD_BLOCK.defaultBlockState(), position().add(0, 0.6, 0), 40, 0.6);
+			Fx.ring(server, element().dust(), position().add(0, 0.1, 0), reach + 0.3, 28);
+			Fx.ring(server, element().dust(), position().add(0, 0.6, 0), reach, 22);
+		}
 		sound(SoundEvents.AMETHYST_CLUSTER_PLACE, 1.0F, 0.8F);
 	}
 
@@ -158,31 +185,56 @@ public class NoelleEntity extends CompanionEntity {
 		burstTicks = BURST_TICKS;
 		entityData.set(SWEEPING, true);
 		setTransientAttack(getAttributeValue(Attributes.ARMOR) * 0.5);
-		geoBlast(4.0, 4.0F + (float) getAttributeValue(Attributes.ARMOR) * 0.6F);
-		if (level() instanceof ServerLevel server) {
-			Vec3 at = position();
-			for (int i = 1; i <= 4; i++) {
-				Fx.ring(server, element().dust(), at.add(0, 0.15 * i, 0), i * 1.0, 20 + i * 10);
-			}
-			server.sendParticles(ParticleTypes.FLASH, at.x, at.y + 1, at.z, 1, 0, 0, 0, 0);
-			Fx.shards(server, Blocks.GOLD_BLOCK.defaultBlockState(), at.add(0, 0.5, 0), 60, 1.5);
+		sound(SoundEvents.RESPAWN_ANCHOR_CHARGE, 1.0F, 0.8F);   // charging up while she crouches
+		burstSwingIn = BURST_SWING_TICKS;
+	}
+
+	/**
+	 * One step of her burst's big swing: the claymore sweeps a 45-degree slice further across the 180 degrees in
+	 * front of her (her right to her left), and Geo damage lands on every enemy it has passed (once each).
+	 */
+	private void tickSwing() {
+		ServerLevel server = level() instanceof ServerLevel s ? s : null;
+		if (swingStep == 0) {
+			swingHit.clear();
+			sound(SoundEvents.PLAYER_ATTACK_SWEEP, 1.0F, 0.6F);
+			sound(SoundEvents.ANVIL_LAND, 0.6F, 0.7F);
 		}
-		sound(SoundEvents.RESPAWN_ANCHOR_CHARGE, 1.0F, 0.8F);
-		sound(SoundEvents.ANVIL_LAND, 0.6F, 0.6F);
+		double upTo = -90.0 + 180.0 * (swingStep + 1) / SWING_STEPS;
+		float damage = 4.0F + (float) getAttributeValue(Attributes.ARMOR) * 0.6F;
+		for (LivingEntity near : level().getEntitiesOfClass(LivingEntity.class, getBoundingBox().inflate(BURST_SWING_REACH + 1.0, 1.5, BURST_SWING_REACH + 1.0),
+				e -> e != this && e instanceof Enemy && e.isAlive() && !(e instanceof TamableAnimal pet && pet.isTame())
+						&& !swingHit.contains(e.getUUID()))) {
+			double distance = Math.sqrt(near.distanceToSqr(getX(), near.getY(), getZ()));
+			double angle = Mth.wrapDegrees(Mth.atan2(near.getZ() - getZ(), near.getX() - getX()) * Mth.RAD_TO_DEG - 90.0 - yBodyRot);
+			if (distance <= BURST_SWING_REACH + near.getBbWidth() / 2.0 && angle >= -90.0 && angle <= upTo) {
+				swingHit.add(near.getUUID());
+				near.hurt(damageSources().mobAttack(this), damage);
+				if (server != null) {
+					Fx.shards(server, Blocks.GOLD_BLOCK.defaultBlockState(), near.position().add(0, near.getBbHeight() / 2, 0), 10, 0.3);
+				}
+			}
+		}
+		if (server != null) {
+			// This step's slice of the gold crescent, out to the swing's reach.
+			Vec3 from = position().add(0, 1.0, 0);
+			float sliceYaw = (float) (yBodyRot + upTo - 90.0 / SWING_STEPS);
+			Fx.arc(server, element().dust(), from, sliceYaw, BURST_SWING_REACH * 0.85, 180.0 / SWING_STEPS, 14, 0.3);
+			Fx.arc(server, element().dust(), from, sliceYaw, BURST_SWING_REACH * 0.55, 180.0 / SWING_STEPS, 9, 0.2);
+			Fx.arc(server, ParticleTypes.WAX_OFF, from, sliceYaw, BURST_SWING_REACH * 0.7, 180.0 / SWING_STEPS, 4, 0.3);
+			if (swingStep == SWING_STEPS - 1) {
+				server.sendParticles(ParticleTypes.FLASH, getX(), getY() + 1, getZ(), 1, 0, 0, 0, 0);
+			}
+		}
+		if (++swingStep >= SWING_STEPS) {
+			swingStep = -1;
+		}
 	}
 
 	private void endBurst() {
 		entityData.set(SWEEPING, false);
 		setTransientAttack(0);
 		sound(SoundEvents.BEACON_DEACTIVATE, 0.7F, 1.2F);
-	}
-
-	/** Geo damage to every enemy (not anyone's pet) within the radius. */
-	private void geoBlast(double radius, float damage) {
-		for (LivingEntity near : level().getEntitiesOfClass(LivingEntity.class, getBoundingBox().inflate(radius),
-				e -> e != this && e instanceof Enemy && e.isAlive() && !(e instanceof TamableAnimal pet && pet.isTame()))) {
-			near.hurt(damageSources().mobAttack(this), damage);
-		}
 	}
 
 	private void setTransientAttack(double amount) {
@@ -208,10 +260,23 @@ public class NoelleEntity extends CompanionEntity {
 		return sweeping() && inCombat();
 	}
 
-	/** Claymore swings hit everything in a wide arc in front of her; Sweeping Time has its own, bigger sweep. */
+	/**
+	 * Claymore swings hit everything in a wide arc in front of her (150 degrees); her last, downward hit only a
+	 * third of that, straight ahead. Sweeping Time has its own, bigger sweep.
+	 */
 	@Override
-	protected double cleaveArc() {
-		return burstActive() ? 0 : 150;
+	protected double cleaveArc(int hit) {
+		return burstActive() ? 0 : lastHit(hit) ? 50 : 150;
+	}
+
+	/** Her last, downward hit lands one harder. */
+	@Override
+	protected float comboBonusDamage(int hit) {
+		return lastHit(hit) ? 1.0F : 0.0F;
+	}
+
+	private static boolean lastHit(int hit) {
+		return hit == COMBO.size() - 1;
 	}
 
 	@Override
@@ -222,8 +287,9 @@ public class NoelleEntity extends CompanionEntity {
 		if (server != null) {
 			server.sendParticles(ParticleTypes.CRIT, target.getX(), target.getY(0.6), target.getZ(), 8, 0.3, 0.3, 0.3, 0.2);
 			if (!burstActive()) {
-				// A small, faint gold arc for a normal swing (Sweeping Time draws a much bigger one).
-				Fx.arc(server, element().dust(), position().add(0, 1.0, 0), yBodyRot, 2.3, 150, 18, 0.4);
+				// A small, faint gold arc for a normal swing, as wide as the swing hits (Sweeping Time draws a bigger one).
+				double arc = cleaveArc(comboHitIndex());
+				Fx.arc(server, element().dust(), position().add(0, 1.0, 0), yBodyRot, 2.3, arc, (int) Math.max(6, arc * 0.12), 0.4);
 			}
 		}
 
@@ -262,6 +328,15 @@ public class NoelleEntity extends CompanionEntity {
 	@Override
 	protected void tickAbilities() {
 		ServerLevel server = level() instanceof ServerLevel s ? s : null;
+		if (skillBlastIn >= 0 && skillBlastIn-- == 0) {
+			skillBlast();
+		}
+		if (burstSwingIn >= 0 && burstSwingIn-- == 0) {
+			swingStep = 0;
+		}
+		if (swingStep >= 0) {
+			tickSwing();
+		}
 		if (shieldTicks > 0) {
 			shieldTicks--;
 			if (shieldTicks == 0) {

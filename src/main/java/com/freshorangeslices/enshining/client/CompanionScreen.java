@@ -56,7 +56,10 @@ public class CompanionScreen extends AbstractContainerScreen<CompanionMenu> {
 	@Nullable
 	private CompanionEntity portrait;
 	private Focus focus = Focus.FULL;
-	private int focusHold;             // ticks a just-equipped focus stays even without hovering
+	private int focusHold;             // ticks a focus stays after you stop hovering, or after something is equipped
+	/** After you stop hovering a slot, its close-up lingers 4 s; after equipping something, 6.5 s. */
+	private static final int HOVER_LINGER = 80, EQUIP_LINGER = 130;
+	private float follow = 1.0F, followO = 1.0F;   // how much she follows the cursor (0 while she poses), eased
 	private float zoom, zoomO;         // 0 = full body, 1 = fully zoomed (eased)
 	private float aimY, aimYO;         // the body height (blocks) the camera centres on
 	private final ItemStack[] lastGear = new ItemStack[5];
@@ -190,7 +193,7 @@ public class CompanionScreen extends AbstractContainerScreen<CompanionMenu> {
 			if (!ItemStack.matches(now, lastGear[i])) {
 				lastGear[i] = now.copy();
 				focus = i == 4 ? Focus.WEAPON : Focus.ARMOR;
-				focusHold = 50;
+				focusHold = EQUIP_LINGER;
 			}
 		}
 		int hoveredIndex = hoveredSlot == null ? -1 : menu.slots.indexOf(hoveredSlot);
@@ -199,7 +202,7 @@ public class CompanionScreen extends AbstractContainerScreen<CompanionMenu> {
 			focus = tuning; // locked while tuning
 		} else if (hovered != null) {
 			focus = hovered;
-			focusHold = Math.max(focusHold, 10);
+			focusHold = Math.max(focusHold, HOVER_LINGER);
 		} else if (focusHold > 0 && --focusHold == 0) {
 			focus = Focus.FULL;
 		}
@@ -211,6 +214,9 @@ public class CompanionScreen extends AbstractContainerScreen<CompanionMenu> {
 			default -> portrait.setMenuPose(pose(MENU_IDLE), false, false, 16);   // relaxes back over 0.8 s
 		}
 
+		// Posing, she stops following the cursor (it fights the pose's own head and body turn); back after.
+		followO = follow;
+		follow += Mth.clamp((focus == Focus.FULL ? 1.0F : 0.0F) - follow, -0.1F, 0.1F);
 		zoomO = zoom;
 		aimYO = aimY;
 		float targetZoom = focus == Focus.FULL ? 0.0F : 1.0F;
@@ -271,7 +277,9 @@ public class CompanionScreen extends AbstractContainerScreen<CompanionMenu> {
 		}
 		int cx = x + (PX0 + PX1) / 2;
 		int feetY = (int) (y + PY0 + boxH / 2.0F + aim * scale);         // so the aimed height sits mid-box
-		float lookX = (cx - mouseX) / 40.0F, lookY = (y + PY0 + boxH / 3.0F - mouseY) / 40.0F;
+		float following = Mth.lerp(partialTick, followO, follow);
+		float lookX = Mth.clamp((cx - mouseX) / 40.0F, -1, 1) * following;
+		float lookY = Mth.clamp((y + PY0 + boxH / 3.0F - mouseY) / 40.0F, -1, 1) * following;
 
 		Quaternionf pose = new Quaternionf().rotateZ((float) Math.PI);
 		Quaternionf tilt = new Quaternionf().rotateX(Mth.clamp(lookY, -1, 1) * 8.0F * Mth.DEG_TO_RAD);
