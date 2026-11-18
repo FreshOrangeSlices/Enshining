@@ -9,8 +9,11 @@ import java.util.Optional;
 
 import javax.annotation.Nullable;
 
+import org.joml.Matrix3f;
+import org.joml.Matrix4f;
 import org.joml.Quaternionf;
 import org.joml.Vector3f;
+import org.joml.Vector4f;
 
 import com.freshorangeslices.enshining.core.CompanionEntity;
 import com.mojang.blaze3d.vertex.PoseStack;
@@ -33,17 +36,21 @@ import software.bernie.geckolib.cache.object.GeoVertex;
 import software.bernie.geckolib.renderer.GeoEntityRenderer;
 import software.bernie.geckolib.renderer.layer.BlockAndItemGeoLayer;
 import software.bernie.geckolib.renderer.layer.GeoRenderLayer;
+import software.bernie.geckolib.util.RenderUtils;
 
 /**
  * Every companion drawn the normal (cutout) way, which keeps overlapping cloth and armor sorting correctly, plus:
  * a "weapon_aura" bone drawn in its own see-through glowing pass while {@link CompanionEntity#weaponAuraActive()},
  * a swapped-in weapon (her menu's weapon slot) drawn in her hand or hovering at "weapon_back",
- * and the "skirt" drawn as one connected ring of panels (see {@link SkirtRing}), from its own texture
- * ("NAME_skirt.png" next to "NAME.png") when the character has one.
+ * the "skirt" drawn as one connected ring of panels (see {@link SkirtRing}), from its own texture
+ * ("NAME_skirt.png" next to "NAME.png") when the character has one, and everything in "waist_extras" (belt, bows,
+ * pouches) worn over that skirt: it moves with the skirt under it, so the skirt never comes through it.
  */
 public class CompanionRenderer<T extends CompanionEntity> extends GeoEntityRenderer<T> {
 	private static final String AURA = "weapon_aura";
 	private static final String SKIRT = "skirt";
+	/** Worn over the skirt (see {@link SkirtRing#ride}). */
+	private static final String WAIST = "waist_extras";
 	private static final int FULL_BRIGHT = 0xF000F0;
 	/**
 	 * Most the skirt swings with the legs (radians, 20 degrees) when not flaring; the more it flares, the less it may
@@ -54,6 +61,18 @@ public class CompanionRenderer<T extends CompanionEntity> extends GeoEntityRende
 	private static final float SKIRT_MAX_TWIST = 0.26F, SKIRT_TWIST_PER_FLARE = 0.6F;
 	private boolean auraPass;
 	private boolean skirtPass;
+	/** Drawing "waist_extras": each corner follows the skirt under it, worked out in the skirt's space. */
+	private boolean riding;
+	private final Matrix4f rideParent = new Matrix4f(), rideParentInv = new Matrix4f(), rideMatrix = new Matrix4f();
+	/** How the whole skirt bone sways this frame (CompanionModel's sway), which what's worn over it follows too. */
+	private final Matrix4f skirtSway = new Matrix4f();
+	@Nullable
+	private GeoBone skirtBone;
+	private final Matrix3f rideNormal = new Matrix3f(), rideNormalInv = new Matrix3f();
+	private final Vector4f ridePos = new Vector4f();
+	private final Vector3f rideDir = new Vector3f();
+	/** The skirt's motion this frame: front swing, back swing, flare, twist (radians, already limited). */
+	private final float[] motion = new float[4];
 	private final Map<ResourceLocation, Optional<ResourceLocation>> skirtTextures = new HashMap<>();
 	@Nullable
 	private BakedGeoModel ringModel;
@@ -183,7 +202,8 @@ public class CompanionRenderer<T extends CompanionEntity> extends GeoEntityRende
 			int packedOverlay, float red, float green, float blue, float alpha) {
 		if (model != ringModel) {  // first frame, or the resources were reloaded
 			ringModel = model;
-			ring = SkirtRing.of(model.getBone(SKIRT).orElse(null));
+			skirtBone = model.getBone(SKIRT).orElse(null);
+			ring = SkirtRing.of(skirtBone);
 			skirtTextures.clear();
 			handBlade.clear();
 			backBlade.clear();
@@ -278,6 +298,60 @@ public class CompanionRenderer<T extends CompanionEntity> extends GeoEntityRende
 	}
 
 	@Override
+	public void renderRecursively(PoseStack poseStack, T companion, GeoBone bone, RenderType renderType, MultiBufferSource bufferSource,
+			VertexConsumer buffer, boolean isReRender, float partialTick, int packedLight, int packedOverlay, float red, float green,
+			float blue, float alpha) {
+		// Entering "waist_extras": remember the space it hangs in (the skirt's), to move its corners with the skirt.
+		boolean ride = !riding && !skirtPass && !auraPass && ring != null && companion != null && WAIST.equals(bone.getName());
+		if (ride) {
+			PoseStack.Pose parent = poseStack.last();
+			rideParent.set(parent.pose());
+			rideParentInv.set(parent.pose()).invert();
+			rideNormal.set(parent.normal());
+			rideNormalInv.set(parent.normal()).invert();
+			skirtMotion(companion, motion);
+			skirtSway.identity();
+			if (skirtBone != null) {
+				PoseStack local = new PoseStack();
+				RenderUtils.prepMatrixForBone(local, skirtBone);
+				skirtSway.set(local.last().pose());
+			}
+			riding = true;
+		}
+		try {
+			super.renderRecursively(poseStack, companion, bone, renderType, bufferSource, buffer, isReRender, partialTick, packedLight,
+					packedOverlay, red, green, blue, alpha);
+		} finally {
+			if (ride) {
+				riding = false;
+			}
+		}
+	}
+
+	@Override
+	public void createVerticesOfQuad(GeoQuad quad, Matrix4f poseState, Vector3f normal, VertexConsumer buffer, int packedLight,
+			int packedOverlay, float red, float green, float blue, float alpha) {
+		if (!riding) {
+			super.createVerticesOfQuad(quad, poseState, normal, buffer, packedLight, packedOverlay, red, green, blue, alpha);
+			return;
+		}
+		for (GeoVertex vertex : quad.vertices()) {
+			Vector3f position = vertex.position();
+			ridePos.set(position.x(), position.y(), position.z(), 1.0F);
+			poseState.transform(ridePos);
+			rideParentInv.transform(ridePos);   // where this corner is around her waist
+			ring.ride(ridePos.x(), ridePos.y(), ridePos.z(), motion, skirtSway, rideMatrix);
+			rideMatrix.transform(ridePos);
+			rideParent.transform(ridePos);
+			rideNormalInv.transform(rideDir.set(normal));
+			rideMatrix.transformDirection(rideDir);
+			rideNormal.transform(rideDir).normalize();
+			buffer.vertex(ridePos.x(), ridePos.y(), ridePos.z(), red, green, blue, alpha, vertex.texU(), vertex.texV(), packedOverlay,
+					packedLight, rideDir.x(), rideDir.y(), rideDir.z());
+		}
+	}
+
+	@Override
 	public void renderCubesOfBone(PoseStack poseStack, GeoBone bone, VertexConsumer buffer, int packedLight, int packedOverlay,
 			float red, float green, float blue, float alpha) {
 		// Each pass draws only its own cubes: the body skips the aura, the aura pass skips the body.
@@ -314,14 +388,8 @@ public class CompanionRenderer<T extends CompanionEntity> extends GeoEntityRende
 		if (bone.isHidden()) {
 			return;
 		}
-		float flare = animatable.skirtFlare[0];
-		float flaring = Math.max(0.0F, flare);
-		float limit = Math.max(0.0F, SKIRT_MAX_SWING - SKIRT_SWING_PER_FLARE * flaring);
-		float lean = animatable.skirtLean[0];
-		float front = Mth.clamp(animatable.skirtFront + lean, -limit, limit);
-		float back = Mth.clamp(animatable.skirtBack + lean, -limit, limit);
-		float twistLimit = Math.max(0.0F, SKIRT_MAX_TWIST - SKIRT_TWIST_PER_FLARE * flaring);
-		float twist = Mth.clamp(animatable.skirtTwist[0], -twistLimit, twistLimit);
+		skirtMotion(animatable, motion);
+		float front = motion[0], back = motion[1], flare = motion[2], twist = motion[3];
 		Quaternionf turn = new Quaternionf();
 		for (GeoCube cube : bone.getCubes()) {
 			poseStack.pushPose();
@@ -348,6 +416,19 @@ public class CompanionRenderer<T extends CompanionEntity> extends GeoEntityRende
 		}
 	}
 
+	/** How the skirt moves this frame: front swing, back swing, flare, twist, each within its limits. */
+	private static void skirtMotion(CompanionEntity companion, float[] out) {
+		float flare = companion.skirtFlare[0];
+		float flaring = Math.max(0.0F, flare);
+		float limit = Math.max(0.0F, SKIRT_MAX_SWING - SKIRT_SWING_PER_FLARE * flaring);
+		float lean = companion.skirtLean[0];
+		float twistLimit = Math.max(0.0F, SKIRT_MAX_TWIST - SKIRT_TWIST_PER_FLARE * flaring);
+		out[0] = Mth.clamp(companion.skirtFront + lean, -limit, limit);
+		out[1] = Mth.clamp(companion.skirtBack + lean, -limit, limit);
+		out[2] = flare;
+		out[3] = Mth.clamp(companion.skirtTwist[0], -twistLimit, twistLimit);
+	}
+
 	/**
 	 * Where each skirt panel hangs from: the top ring (the highest panels) gives the waist line; every panel gets
 	 * the point on it straight above, and the outward direction it faces. Worked out once per model.
@@ -362,6 +443,21 @@ public class CompanionRenderer<T extends CompanionEntity> extends GeoEntityRende
 		final Map<GeoCube, float[]> columns = new IdentityHashMap<>();
 		/** The middle of the waist (render units), which the hem twists around. */
 		float centerX, centerZ;
+		/** The waist line: its height, how far it reaches front and back, and the top panels around it by angle. */
+		float waistY, depth;
+		private List<float[]> waist = List.of();
+		private float[] angles = new float[0];
+		private final float[] spot = new float[4];
+		private final Quaternionf turn = new Quaternionf();
+		private final Matrix4f swayed = new Matrix4f();
+		/**
+		 * What's worn over the skirt starts following it half a pixel above the waist line (where the panels' top
+		 * corners reach as they swing), fully half a pixel lower; and it's lifted off the skirt a little while the
+		 * skirt moves (1.2 px per radian, half a pixel at the most): the panels either side of a spot move a little
+		 * more than the spot itself. Tested: all of Noelle's waist pieces stay 0.12 px or more above the skirt at every
+		 * extreme of its swing, flare, twist and sway.
+		 */
+		private static final float RIDE_TOP = 0.5F / 16.0F, RIDE_FADE = 0.5F / 16.0F, RIDE_LIFT = 1.2F / 16.0F;
 
 		@Nullable
 		static SkirtRing of(@Nullable GeoBone skirt) {
@@ -381,12 +477,15 @@ public class CompanionRenderer<T extends CompanionEntity> extends GeoEntityRende
 			for (float[] t : tops) {
 				topY = Math.max(topY, t[1]);
 			}
-			// The waist: panels whose top is within a third of a pixel of the highest.
+			// The waist: panels whose top is within a third of a pixel of the highest (x, y, z, then facing x, z).
 			List<float[]> waist = new ArrayList<>();
+			List<GeoCube> waistCubes = new ArrayList<>();
 			float cx = 0, cz = 0, y = 0;
-			for (float[] t : tops) {
+			for (int i = 0; i < tops.size(); i++) {
+				float[] t = tops.get(i);
 				if (t[1] >= topY - 0.3F / 16.0F) {
-					waist.add(t);
+					waist.add(new float[] {t[0], t[1], t[2], 0, 0});
+					waistCubes.add(cubes.get(i));
 					cx += t[0];
 					cz += t[2];
 					y += t[1];
@@ -396,6 +495,14 @@ public class CompanionRenderer<T extends CompanionEntity> extends GeoEntityRende
 			cz /= waist.size();
 			y /= waist.size();
 			float centerX = cx, centerZ = cz;
+			for (int i = 0; i < waist.size(); i++) {
+				float[] w = waist.get(i);
+				float rx = w[0] - cx, rz = w[2] - cz;
+				float len = Math.max(1.0E-4F, Mth.sqrt(rx * rx + rz * rz));
+				float[] f = facing(waistCubes.get(i), rx / len, rz / len);
+				w[3] = f[0];
+				w[4] = f[1];
+			}
 			waist.sort((a, b) -> Float.compare(angle(a, centerX, centerZ), angle(b, centerX, centerZ)));
 			float[] angles = new float[waist.size()];
 			for (int i = 0; i < angles.length; i++) {
@@ -408,9 +515,13 @@ public class CompanionRenderer<T extends CompanionEntity> extends GeoEntityRende
 			SkirtRing ring = new SkirtRing();
 			ring.centerX = cx;
 			ring.centerZ = cz;
+			ring.waistY = y;
+			ring.depth = depth;
+			ring.waist = waist;
+			ring.angles = angles;
 			for (int i = 0; i < cubes.size(); i++) {
 				float[] t = tops.get(i);
-				float[] hinge = onWaist(waist, angles, angle(t, cx, cz));
+				float[] hinge = onWaist(waist, angles, angle(t, cx, cz), new float[4]);
 				float rx = t[0] - cx, rz = t[2] - cz;
 				float len = Mth.sqrt(rx * rx + rz * rz);
 				if (len < 1.0E-4F) {
@@ -482,8 +593,39 @@ public class CompanionRenderer<T extends CompanionEntity> extends GeoEntityRende
 			return (float) Math.atan2(p[0] - cx, p[2] - cz);
 		}
 
-		/** The waist point at an angle: between the two waist panels either side of it (sorted by angle). */
-		private static float[] onWaist(List<float[]> waist, float[] angles, float a) {
+		/**
+		 * How a spot worn over the skirt moves (x, y, z in render units, in the space the skirt hangs in): like the
+		 * skirt right under it, the same swing and flare about the same waist line and the skirt bone's own sway, so
+		 * it stays on top of it.
+		 */
+		void ride(float x, float y, float z, float[] motion, Matrix4f sway, Matrix4f out) {
+			out.identity();
+			float weight = Mth.clamp((waistY + RIDE_TOP - y) / RIDE_FADE, 0.0F, 1.0F);
+			if (weight <= 0 || waist.isEmpty()) {
+				return;
+			}
+			float[] w = onWaist(waist, angles, (float) Math.atan2(x - centerX, z - centerZ), spot);
+			float side = Mth.clamp((w[1] - centerZ) / depth, -1.0F, 1.0F);
+			float swing = (motion[0] * (side < 0 ? side * side : 0.0F) + motion[1] * (side > 0 ? side * side : 0.0F)) * weight;
+			float lift = RIDE_LIFT * weight
+					* (Math.max(Math.abs(motion[0]), Math.abs(motion[1])) + Math.abs(motion[2]) + 0.5F * Math.abs(motion[3]));
+			float dx = x - centerX, dz = z - centerZ;
+			float len = Mth.sqrt(dx * dx + dz * dz);
+			if (len > 1.0E-4F) {
+				out.translate(lift * dx / len, 0.0F, lift * dz / len);
+			}
+			out.translate(w[0], waistY, w[1])
+					.rotate(turn.rotationAxis(motion[2] * weight, -w[3], 0.0F, w[2]))
+					.rotateX(swing)
+					.translate(-w[0], -waistY, -w[1]);
+			out.mulLocal(swayed.identity().lerp(sway, weight));   // and the whole skirt's sway on top
+		}
+
+		/**
+		 * The waist at an angle, between the two waist panels either side of it (sorted by angle): the point x, z
+		 * and the way the skirt faces there x, z.
+		 */
+		private static float[] onWaist(List<float[]> waist, float[] angles, float a, float[] out) {
 			int n = waist.size();
 			int next = 0;
 			while (next < n && angles[next] <= a) {
@@ -506,7 +648,13 @@ public class CompanionRenderer<T extends CompanionEntity> extends GeoEntityRende
 				to = angles[next];
 			}
 			float f = to - from < 1.0E-5F ? 0.0F : Mth.clamp((at - from) / (to - from), 0.0F, 1.0F);
-			return new float[] {Mth.lerp(f, p[0], q[0]), Mth.lerp(f, p[2], q[2])};
+			float fx = Mth.lerp(f, p[3], q[3]), fz = Mth.lerp(f, p[4], q[4]);
+			float len = Math.max(1.0E-4F, Mth.sqrt(fx * fx + fz * fz));
+			out[0] = Mth.lerp(f, p[0], q[0]);
+			out[1] = Mth.lerp(f, p[2], q[2]);
+			out[2] = fx / len;
+			out[3] = fz / len;
+			return out;
 		}
 	}
 }

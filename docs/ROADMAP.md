@@ -16,6 +16,14 @@ Nothing here is built yet unless marked done. Order is roughly the order we'll d
   when she spins or falls and bounces on landing, and lags behind turns and spins (lower panels more, up to 15
   degrees). All of it tested gap-free on the 2-px panels with 25% overlap. Keyframing just `skirt_front` /
   `skirt_back` still moves them as solid blocks (seams can show): keep those keys small, or key `skirt`.
+- Worn over the skirt (done, code): everything in `waist_extras` (belt, bows, shield) rides the skirt under it.
+  Each corner follows the skirt's swing, flare and sway at its spot around the waist (from half a pixel above the
+  waist line down), and lifts off a hair while the skirt moves, so the skirt never comes through. Checked against every
+  extreme of the skirt's motion: all of Noelle's waist pieces stay at least 0.12 px on top (before: the back bow's
+  tails went 2.2 px under). Keep `waist_extras` beside `skirt` (both straight under `body`), and model pieces on or
+  just outside the skirt at rest: the belt rides, it doesn't push out of the skirt by itself.
+- Belt bow: its own spot at 3x detail (v. 230-242 on the texture, `tools/reuv_group.py`), started as a copy of what
+  it showed. The back bow's wings moved 0.7 px back and a few chain pieces 0.1-0.4 px out: they sat inside the skirt.
 - Eyes: "eyes_open" / "eyes_half" / "eyes_closed" / "eyes_happy" are whole-face sheets 0.1 px in front of her
   face (like Ganyu's in Migamigos), one shown at a time, each with its own 8x8 patch (started as copies of her
   face; `tools/add_eye_overlays.py`). Code: blinks every 3-7 s; happy for 3 s on level up, a gift, opening her

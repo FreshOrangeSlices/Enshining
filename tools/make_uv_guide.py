@@ -77,7 +77,10 @@ for uid, path in owner.items():
     if hit is None:
         acc = [p for p in path if p not in {k for k, *_ in PARTS} and p not in ('root',) and not p.endswith('_extras')
                and not p.startswith('armor') and not p.startswith('eyes') and p != 'hair']
-        if acc:
+        named = [p for p in acc if not p.startswith(('flow_', 'glow_'))]   # the innermost named piece (belt bow, shield)
+        if named:
+            hit = 'acc:' + named[-1]
+        elif acc:
             hit = 'acc:' + acc[0]
         else:
             hit = next((p for p in reversed(path) if p in {k for k, *_ in PARTS}), path[-1])
