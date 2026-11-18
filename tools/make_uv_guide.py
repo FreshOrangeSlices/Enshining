@@ -135,7 +135,8 @@ tpl = Image.new('RGBA', (W, H), (0, 0, 0, 0))
 td = ImageDraw.Draw(tpl)
 for part, letter, x0, y0, x1, y1, layer in faces:
     col = info[part][1]
-    td.rectangle([math.floor(x0), math.floor(y0), math.ceil(x1) - 1, math.ceil(y1) - 1], fill=col + (90 if layer else 150,))
+    a, b = math.floor(x0), math.floor(y0)
+    td.rectangle([a, b, max(a, math.ceil(x1) - 1), max(b, math.ceil(y1) - 1)], fill=col + (90 if layer else 150,))
 tpl.save(template_path)
 
 # ---- the big labelled guide --------------------------------------------------------------------------------------
@@ -159,7 +160,7 @@ d.text((4, oy + H * S + 6), 'v (down) - the second UV number', fill=(90, 90, 90)
 centers = {}
 for part, letter, x0, y0, x1, y1, layer in faces:
     col = info[part][1]
-    box = [ox + x0 * S, oy + y0 * S, ox + x1 * S - 1, oy + y1 * S - 1]
+    box = [ox + x0 * S, oy + y0 * S, max(ox + x0 * S, ox + x1 * S - 1), max(oy + y0 * S, oy + y1 * S - 1)]
     d.rectangle(box, fill=col + (110 if layer else 200,), outline=tuple(int(c * 0.55) for c in col) + (255,))
     if (x1 - x0) * S >= 11 and (y1 - y0) * S >= 12 and part != 'skirt':
         d.text(((box[0] + box[2]) / 2, (box[1] + box[3]) / 2), letter.lower() if layer else letter,
