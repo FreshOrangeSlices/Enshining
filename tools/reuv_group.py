@@ -10,6 +10,7 @@ Groups inside it can be left where they are with --keep (e.g. something that alr
 usage: reuv_group.py in.bbmodel out.bbmodel GROUP DENSITY [--row=N] [--keep=GROUP,GROUP] [--front=WxH]
   DENSITY  texture pixels per model pixel (3 = three times the detail of the 1:1 skin)
   --row    the first texture row to look for free space from (default 0)
+  --col    the first texture column to look for free space from (default 0), e.g. to keep props together
   --front  instead of DENSITY: each cube's front gets exactly W x H pixels (sides and depth follow the width's scale)
 """
 import math, sys
@@ -23,6 +24,7 @@ opts = dict(a[2:].split('=', 1) for a in sys.argv[1:] if a.startswith('--'))
 src, dst, group = args[0], args[1], args[2]
 density = float(args[3]) if len(args) > 3 else 1.0
 row = int(opts.get('row', 0))
+col = int(opts.get('col', 0))
 keep = set(filter(None, opts.get('keep', '').split(',')))
 
 P = Project(src)
@@ -64,7 +66,7 @@ for e in cubes(P.nodes[group], keep):
     else:
         w, h, d = (round(v * density) for v in size)
     W, H = 2 * (d + w), d + h
-    U, V = P.free_spot(W, H, start_row=row)
+    U, V = P.free_spot(W, H, start_row=row, start_col=col)
     layout = {'up': (U + d, V, w, d), 'down': (U + d + w, V, w, d), 'east': (U, V + d, d, h),
               'north': (U + d, V + d, w, h), 'west': (U + d + w, V + d, d, h), 'south': (U + d + w + d, V + d, w, h)}
     for name, (x, y, fw, fh) in layout.items():

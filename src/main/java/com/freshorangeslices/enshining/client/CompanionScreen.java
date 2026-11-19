@@ -223,14 +223,14 @@ public class CompanionScreen extends AbstractContainerScreen<CompanionMenu> {
 		}
 		switch (focus) {
 			// Her own weapon (or a swapped one) comes out; it's always there, so only the visibility toggle hides it.
-			// Into a pose over 5 ticks; from its start into its repeating part at once (the two meet exactly).
+			// Into a pose over 12 ticks (5 snapped into place); from its start into its repeating part at once.
 			case WEAPON -> {
 				RawAnimation pose = pose(MENU_WEAPON);
-				portrait.setMenuPose(pose, real.setting(CompanionEntity.SHOW_WEAPON), false, poseLooping ? 0 : 5);
+				portrait.setMenuPose(pose, real.setting(CompanionEntity.SHOW_WEAPON), false, poseLooping ? 0 : 12);
 			}
 			case ARMOR -> {
 				RawAnimation pose = pose(MENU_ARMOR);
-				portrait.setMenuPose(pose, false, true, poseLooping ? 0 : 5);   // eyes shut while she poses
+				portrait.setMenuPose(pose, false, true, poseLooping ? 0 : 12);   // eyes shut while she poses
 			}
 			default -> portrait.setMenuPose(pose(MENU_IDLE), false, false, 16);   // relaxes back over 0.8 s
 		}

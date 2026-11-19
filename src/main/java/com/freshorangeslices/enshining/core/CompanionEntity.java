@@ -79,15 +79,24 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 	public static final int SHOW_ARMOR = 1, SHOW_WEAPON = 2, SKILL_ON = 4, BURST_ON = 8;
 	private static final int DEFAULT_SETTINGS = SHOW_ARMOR | SHOW_WEAPON | SKILL_ON | BURST_ON;
 	private static final UUID WEAPON_SWAP = UUID.fromString("5e3b1c2a-7d41-4c55-9a0e-0e1a1f000004");
+	/** The dash at the start of a run: 1.35x speed for 1.5 s, only after 2 s of walking or standing. */
+	private static final UUID DASH_SPEED = UUID.fromString("5e3b1c2a-7d41-4c55-9a0e-0e1a1f000007");
+	private static final int DASH_TICKS = 30, DASH_AFTER_CALM = 40;
+	private int dashTicks, calmTicks = DASH_AFTER_CALM;
 	/** Half speed while her burst plays. */
 	private static final UUID BURST_SLOW = UUID.fromString("5e3b1c2a-7d41-4c55-9a0e-0e1a1f000005");
 	/** A combo hit's extra damage (see {@link #comboBonusDamage}), on only while that hit lands. */
 	private static final UUID COMBO_BONUS = UUID.fromString("5e3b1c2a-7d41-4c55-9a0e-0e1a1f000006");
 	/** The combo, packed: (count of hits started << 3) | phase. Phase 0 = none, 1..n = combo hit n, 7 = the ending. */
 	private static final EntityDataAccessor<Integer> COMBO = SynchedEntityData.defineId(CompanionEntity.class, EntityDataSerializers.INT);
+	/** The first stretch of a run: the quick dash (Genshin's sprint start) before she settles into a jog. */
+	private static final EntityDataAccessor<Boolean> DASHING = SynchedEntityData.defineId(CompanionEntity.class, EntityDataSerializers.BOOLEAN);
 	private static final int COMBO_END_PHASE = 7;
-	/** The charged attack's phase (combos have at most 5 hits). */
-	private static final int CHARGED_PHASE = 6;
+	/** The charged attack's stage (0 none, 1 wind-up, 2 spin, 3 finish), for the clients' animation. */
+	private static final EntityDataAccessor<Integer> CHARGE = SynchedEntityData.defineId(CompanionEntity.class, EntityDataSerializers.INT);
+	private static final int CHARGE_START = 1, CHARGE_SPIN = 2, CHARGE_FINISH = 3;
+	/** Slow, like sneaking, while she spins. */
+	private static final UUID SPIN_SLOW = UUID.fromString("5e3b1c2a-7d41-4c55-9a0e-0e1a1f000008");
 	/** How long (ticks) she lingers on a combo hit's last frame waiting for the next one before the combo resets. */
 	private static final int COMBO_WINDOW_TICKS = 20;
 	public static final int ACTION_NONE = 0;
@@ -101,6 +110,10 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 	protected static final RawAnimation WALK = RawAnimation.begin().thenLoop("animation.companion.walk");
 	protected static final RawAnimation SIT = RawAnimation.begin().thenLoop("animation.companion.sit");
 	protected static final RawAnimation RUN = RawAnimation.begin().thenLoop("animation.companion.run");
+	/** Running after the dash; characters without one keep running with RUN. */
+	protected static final RawAnimation JOG = RawAnimation.begin().thenLoop("animation.companion.jog");
+	/** Sitting, layered over SIT (its own controller): her sitting idle, the one that can bring out her props. */
+	protected static final RawAnimation SIT_IDLE = RawAnimation.begin().thenLoop("animation.companion.sit_idle");
 	protected static final RawAnimation JUMP = RawAnimation.begin().thenLoop("animation.companion.jump");
 	protected static final RawAnimation SWIM = RawAnimation.begin().thenLoop("animation.companion.swim");
 	protected static final RawAnimation ATTACK = RawAnimation.begin().thenPlay("animation.companion.attack");
@@ -118,6 +131,10 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 	private int comboNext;        // which hit comes next (0-based)
 	private int comboHitIndex;    // which hit is playing (0-based; the charged attack is one past the last hit)
 	private int combosFinished;   // combos played to their last hit, for the charged attack's turn
+	private int chargeStage;      // server side: where the charged attack is (CHARGE_*), and for how long
+	private int chargeTicks;
+	private int spinLoops;
+	private int chargeShown;      // client side: the stage the animation was last set for
 	private int comboCount;       // hits started, so clients can tell a new hit from the same one
 	private int comboPieceTicks;  // ticks left in the hit being played
 	private int comboWindowTicks; // ticks left to continue the combo after a hit
@@ -204,17 +221,35 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 	}
 
 	/**
-	 * The charged attack (null: none), played every {@link #chargedEvery()}th combo in place of starting over when
-	 * an enemy is still in reach after the last hit. Its arc and bonus come from {@link #cleaveArc(int)} and
-	 * {@link #comboBonusDamage(int)} with the hit number one past the last.
+	 * A charged attack: a wind-up, a spin that loops (exactly one loop of the animation per spinTicks, so it can end
+	 * on a loop and the finish follows without a jump), and a finishing swing that lands at finishImpact.
+	 */
+	public record ChargedAttack(RawAnimation start, int startTicks, RawAnimation spin, int spinTicks, RawAnimation finish,
+			int finishTicks, int finishImpact) {
+	}
+
+	/**
+	 * Her charged attack (null: none). After her combo's last hit, with an enemy still in reach, every second time
+	 * or straight away when she's surrounded (3+ enemies within 4 blocks), in place of starting the combo over:
+	 * she winds up, spins (slow, like sneaking, hitting all round her every half second, at least two loops and on
+	 * while anything's in reach, six at most), then finishes with one harder hit all round her.
 	 */
 	@Nullable
-	protected ComboHit chargedHit() {
+	protected ChargedAttack chargedAttack() {
 		return null;
 	}
 
-	protected int chargedEvery() {
-		return 2;
+	/** Each of the spin's hits, and the finish, as a share of her attack. */
+	protected float spinHitDamage() {
+		return 0.6F;
+	}
+
+	protected float finishHitDamage() {
+		return 1.5F;
+	}
+
+	/** A spin hit or the finish just landed (effects: particles, sounds). */
+	protected void onChargedHit(boolean finish) {
 	}
 
 	protected double comboEndLength() {
@@ -250,6 +285,8 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 		entityData.define(ACTION, ACTION_NONE);
 		entityData.define(COMBAT, false);
 		entityData.define(COMBO, 0);
+		entityData.define(DASHING, false);
+		entityData.define(CHARGE, 0);
 		entityData.define(SETTINGS, DEFAULT_SETTINGS);
 		entityData.define(BEHAVIOR, CompanionBehavior.AGGRESSIVE.ordinal());
 	}
@@ -341,6 +378,10 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 	public boolean handWeaponWanted, backWeaponWanted;
 	/** Client side: ticks of sparkle left over the claymore just summoned to her hand (it appears at once). */
 	public float handWeaponSpark;
+	/** Client side: how far each prop (by name) has appeared, 0-1, whether its animation wants it, and the clock. */
+	public final java.util.Map<String, Float> propIn = new java.util.HashMap<>();
+	public final java.util.Map<String, Boolean> propWanted = new java.util.HashMap<>();
+	public float propLastTime;
 	public float weaponLastTime = -1.0F;
 	private float lookBlend = 1.0F;  // client side: how much the head looks at things (0 in a fight), eased per tick
 	private float lookBlendO = 1.0F;
@@ -457,9 +498,9 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 
 	// ---- Combo ------------------------------------------------------------------------------------------------
 
-	/** Server side: whether she's free to start the next combo hit (none playing, no skill or burst). */
+	/** Server side: whether she's free to start the next combo hit (none playing, no skill, burst or charged attack). */
 	public boolean canStartComboHit() {
-		if (comboHits().isEmpty() || action() != ACTION_NONE) {
+		if (comboHits().isEmpty() || action() != ACTION_NONE || chargeStage != 0) {
 			return false;
 		}
 		// Animation cancel: once the hit has landed (plus a beat), the next one can cut its recovery short.
@@ -484,9 +525,83 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 		startPiece(hits.get(index), index, index + 1, target);
 	}
 
-	/** The charged attack on this target (after the combo's last hit, the combo then starts over). */
+	/** The charged attack on this target (after the combo's last hit; the combo starts over after it). */
 	private void startCharged(LivingEntity target) {
-		startPiece(chargedHit(), comboHits().size(), CHARGED_PHASE, target);
+		resetCombo();
+		chargeStage = CHARGE_START;
+		chargeTicks = 0;
+		spinLoops = 0;
+		comboTarget = target;
+		combatTicks = 60;
+		setYRot((float) (Mth.atan2(target.getZ() - getZ(), target.getX() - getX()) * Mth.RAD_TO_DEG) - 90.0F);
+		setYBodyRot(getYRot());
+		entityData.set(CHARGE, chargeStage);
+	}
+
+	/** Server side, each tick: the charged attack's stages (see {@link #chargedAttack()}). */
+	private void tickCharged() {
+		ChargedAttack charged = chargedAttack();
+		if (chargeStage == 0 || charged == null) {
+			chargeStage = 0;
+			entityData.set(CHARGE, 0);
+			return;
+		}
+		chargeTicks++;
+		if (chargeStage != CHARGE_SPIN) {
+			// The wind-up and the finish are planted.
+			getNavigation().stop();
+			getMoveControl().setWantedPosition(getX(), getY(), getZ(), 0.0);
+		}
+		switch (chargeStage) {
+			case CHARGE_START -> {
+				if (chargeTicks >= charged.startTicks()) {
+					chargeStage = CHARGE_SPIN;
+					chargeTicks = 0;
+				}
+			}
+			case CHARGE_SPIN -> {
+				if (chargeTicks % 10 == 0) {
+					chargedHit(spinHitDamage(), 1.0, 0.3F);
+					onChargedHit(false);
+				}
+				if (chargeTicks % charged.spinTicks() == 0) {
+					spinLoops++;
+					if (spinLoops >= 6 || spinLoops >= 2 && comboFoe(0.0) == null) {
+						chargeStage = CHARGE_FINISH;
+						chargeTicks = 0;
+					}
+				}
+			}
+			default -> {
+				if (chargeTicks == charged.finishImpact()) {
+					chargedHit(finishHitDamage(), 1.25, 0.8F);
+					onChargedHit(true);
+				}
+				if (chargeTicks >= charged.finishTicks()) {
+					chargeStage = 0;
+				}
+			}
+		}
+		entityData.set(CHARGE, chargeStage);
+	}
+
+	/** Every enemy all round her within her reach (times reachScale), at this share of her attack. */
+	private void chargedHit(float share, double reachScale, float knockback) {
+		float damage = (float) getAttributeValue(Attributes.ATTACK_DAMAGE) * share;
+		double reach = meleeReach() * meleeReachScale() * reachScale;
+		for (LivingEntity near : level().getEntitiesOfClass(LivingEntity.class, getBoundingBox().inflate(reach + 1.0, 1.0, reach + 1.0),
+				e -> e != this && e instanceof Enemy && e.isAlive() && !(e instanceof TamableAnimal pet && pet.isTame())
+						&& distanceTo(e) <= reach + e.getBbWidth() / 2.0)) {
+			if (near.hurt(damageSources().mobAttack(this), damage)) {
+				near.knockback(knockback, getX() - near.getX(), getZ() - near.getZ());
+			}
+		}
+	}
+
+	/** Surrounded: three or more enemies within 4 blocks. */
+	private boolean surrounded() {
+		return level().getEntitiesOfClass(Mob.class, getBoundingBox().inflate(4.0), mob -> mob instanceof Enemy && mob.isAlive()
+				&& !(mob instanceof TamableAnimal tame && tame.isTame())).size() >= 3;
 	}
 
 	private void startPiece(ComboHit hit, int index, int phase, LivingEntity target) {
@@ -601,9 +716,9 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 			if (lastHit) {
 				combosFinished++;
 			}
-			if (next != null && action() == ACTION_NONE && lastHit && chargedHit() != null
-					&& combosFinished % Math.max(1, chargedEvery()) == 0) {
-				// Every so often, still facing someone after the last hit: the charged attack instead of starting over.
+			if (next != null && action() == ACTION_NONE && lastHit && chargedAttack() != null
+					&& (combosFinished % 2 == 0 || surrounded())) {
+				// Every second time, or surrounded, still facing someone after the last hit: the charged attack.
 				setTarget(next);
 				startCharged(next);
 			} else if (next != null && action() == ACTION_NONE) {
@@ -949,7 +1064,16 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 		}
 		tickAbilities();
 		tickCombo();
-		boolean comboActive = comboPieceTicks > 0 || comboWindowTicks > 0 || comboEndTicks > 0;
+		tickCharged();
+		boolean comboActive = comboPieceTicks > 0 || comboWindowTicks > 0 || comboEndTicks > 0 || chargeStage != 0;
+		var spinSpeed = getAttribute(Attributes.MOVEMENT_SPEED);
+		boolean spinning = chargeStage == CHARGE_SPIN;
+		if (spinSpeed != null && spinning != (spinSpeed.getModifier(SPIN_SLOW) != null)) {
+			spinSpeed.removeModifier(SPIN_SLOW);
+			if (spinning) {
+				spinSpeed.addTransientModifier(new AttributeModifier(SPIN_SLOW, "Charged spin", -0.7, AttributeModifier.Operation.MULTIPLY_TOTAL));
+			}
+		}
 		// Footwork: each hit lets her step up to comboTravel() blocks toward her foe (counted from the hit's start),
 		// then she holds her ground until the next hit.
 		if (comboActive) {
@@ -988,11 +1112,30 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 		}
 		entityData.set(COMBAT, combatTicks > 0);
 		// Sprinting (synced) while chasing or catching up, so clients pick the run animation; strolling stays a walk.
-		setSprinting(!comboActive && getNavigation().isInProgress() && getMoveControl().getSpeedModifier() >= 1.05);
+		// Breaking into a run after 2 s or more of walking or standing starts with a 1.5 s dash at 1.35x speed
+		// (the run animation), then she jogs at her normal running speed.
+		boolean running = !comboActive && getNavigation().isInProgress() && getMoveControl().getSpeedModifier() >= 1.05;
+		if (running && !isSprinting() && calmTicks >= DASH_AFTER_CALM) {
+			dashTicks = DASH_TICKS;
+		}
+		calmTicks = running ? 0 : calmTicks + 1;
+		if (!running) {
+			dashTicks = 0;
+		} else if (dashTicks > 0) {
+			dashTicks--;
+		}
+		setSprinting(running);
+		entityData.set(DASHING, dashTicks > 0);
+		if (speed != null && (dashTicks > 0) != (speed.getModifier(DASH_SPEED) != null)) {
+			speed.removeModifier(DASH_SPEED);
+			if (dashTicks > 0) {
+				speed.addTransientModifier(new AttributeModifier(DASH_SPEED, "Dash", 0.35, AttributeModifier.Operation.MULTIPLY_TOTAL));
+			}
+		}
 
 		LivingEntity target = getTarget();
 		// One at a time: a skill or burst always plays to its end (nothing cuts in, not even the other one).
-		if (target == null || !target.isAlive() || distanceToSqr(target) > 36 || comboPieceTicks > 0 || actionTicks > 0) {
+		if (target == null || !target.isAlive() || distanceToSqr(target) > 36 || comboPieceTicks > 0 || actionTicks > 0 || chargeStage != 0) {
 			return;
 		}
 		if (setting(BURST_ON) && energy >= burstCost()) {
@@ -1142,6 +1285,21 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 			}
 			int action = action();
 			playingMove = true;
+			int charge = entityData.get(CHARGE);
+			ChargedAttack charged = chargedAttack();
+			if (charge != 0 && charged != null && action == ACTION_NONE) {
+				if (charge != chargeShown) {
+					// Into the wind-up over 2 ticks; wind-up to spin to finish at once (each starts where the last ends).
+					state.getController().setAnimationSpeed(1.0);
+					state.getController().setTransitionLength(chargeShown == 0 ? 2 : 0);
+					if (chargeShown == 0) {
+						state.getController().forceAnimationReset();
+					}
+					chargeShown = charge;
+				}
+				return state.setAndContinue(charge == CHARGE_START ? charged.start() : charge == CHARGE_SPIN ? charged.spin() : charged.finish());
+			}
+			chargeShown = 0;
 			if (action != ACTION_NONE) {
 				if (action != actionShown) {
 					// A new skill or burst: from its first frame, at its own speed, with a short blend in.
@@ -1191,13 +1349,37 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 			}
 			if (state.isMoving()) {
 				calmPose = !isSprinting();
-				return state.setAndContinue(isSprinting() ? RUN : WALK);
+				if (isSprinting()) {
+					return state.setAndContinue(entityData.get(DASHING) || !hasAnimation("animation.companion.jog") ? RUN : JOG);
+				}
+				return state.setAndContinue(WALK);
 			}
 			calmPose = true;
 			idling = true;
 			RawAnimation fidget = idleFidget(state, wasIdle);
 			return state.setAndContinue(fidget != null ? fidget : IDLE);
 		}));
+		// Sitting: her sitting idle on top of the sit pose (it keys what it moves; the sit pose keeps the rest).
+		controllers.add(new AnimationController<>(this, "sitting", 6, state -> {
+			if (menuAnimation == null && isInSittingPose() && hasAnimation("animation.companion.sit_idle")) {
+				return state.setAndContinue(SIT_IDLE);
+			}
+			return PlayState.STOP;
+		}));
+	}
+
+	/** Client side: her animation file, baked (null until it's loaded). */
+	@Nullable
+	protected software.bernie.geckolib.loading.object.BakedAnimations bakedAnimations() {
+		var file = new net.minecraft.resources.ResourceLocation(com.freshorangeslices.enshining.Enshining.MODID, "animations/entity/"
+				+ net.minecraftforge.registries.ForgeRegistries.ENTITY_TYPES.getKey(getType()).getPath() + ".animation.json");
+		return software.bernie.geckolib.cache.GeckoLibCache.getBakedAnimations().get(file);
+	}
+
+	/** Client side: whether her animation file has this animation. */
+	protected boolean hasAnimation(String name) {
+		var baked = bakedAnimations();
+		return baked != null && baked.getAnimation(name) != null;
 	}
 
 	// Client side: standing idle, now and then she plays one of her extra idles ("..._idle_<anything>"), once.
@@ -1206,9 +1388,11 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 	private RawAnimation fidget;
 	private String lastFidget = "";
 	private int nextFidgetAt;
+	/** About every 5 minutes of standing idle (4 to 6). */
+	private static final int FIDGET_EVERY = 20 * 60 * 4;
 
 	/**
-	 * After 8 to 18 seconds of standing idle, one of the animations named "animation.companion.idle_..." or
+	 * After 4 to 6 minutes of standing idle, one of the animations named "animation.companion.idle_..." or
 	 * "animation.NAME.idle_..." in her animation file (a different one from last time when there are several),
 	 * played once, then her plain idle again until the next one. Null: the plain idle.
 	 */
@@ -1216,22 +1400,20 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 	private RawAnimation idleFidget(software.bernie.geckolib.core.animation.AnimationState<?> state, boolean wasIdle) {
 		if (!wasIdle) {
 			fidget = null;
-			nextFidgetAt = tickCount + 160 + random.nextInt(200);
+			nextFidgetAt = tickCount + FIDGET_EVERY + random.nextInt(FIDGET_EVERY / 2);
 		}
 		if (fidget != null) {
 			if (!state.isCurrentAnimation(fidget) || !state.getController().hasAnimationFinished()) {
 				return fidget;
 			}
 			fidget = null;
-			nextFidgetAt = tickCount + 160 + random.nextInt(200);
+			nextFidgetAt = tickCount + FIDGET_EVERY + random.nextInt(FIDGET_EVERY / 2);
 		}
 		if (tickCount < nextFidgetAt) {
 			return null;
 		}
-		nextFidgetAt = tickCount + 160 + random.nextInt(200);
-		var file = new net.minecraft.resources.ResourceLocation(com.freshorangeslices.enshining.Enshining.MODID, "animations/entity/"
-				+ net.minecraftforge.registries.ForgeRegistries.ENTITY_TYPES.getKey(getType()).getPath() + ".animation.json");
-		var baked = software.bernie.geckolib.cache.GeckoLibCache.getBakedAnimations().get(file);
+		nextFidgetAt = tickCount + FIDGET_EVERY + random.nextInt(FIDGET_EVERY / 2);
+		var baked = bakedAnimations();
 		if (baked == null) {
 			return null;
 		}
@@ -1259,9 +1441,7 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 			comboSeen = count;
 			return null;
 		}
-		ComboHit charged = chargedHit();
 		RawAnimation animation = phase == COMBO_END_PHASE ? comboEndAnimation()
-				: phase == CHARGED_PHASE ? (charged == null ? null : charged.animation())
 				: comboHits().get(Math.min(phase, comboHits().size()) - 1).animation();
 		if (animation == null) {
 			return null;

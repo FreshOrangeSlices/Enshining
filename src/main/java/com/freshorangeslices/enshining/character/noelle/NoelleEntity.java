@@ -49,6 +49,8 @@ public class NoelleEntity extends CompanionEntity {
 	 * is only the wind-up; the hit is its second, big turning sweep: from 1.1 s to the end (1.75 s) it sweeps across
 	 * 180 degrees in front of her, a slice a tick, as the claymore goes through.
 	 */
+	/** How far the skill's burst of stone reaches all round her (blocks from her middle to an enemy's edge). */
+	private static final double SKILL_REACH = 2.0;
 	private static final int SKILL_BLAST_TICKS = 5, BURST_SWING_TICKS = 22, SWING_STEPS = 14;
 	/** How far the burst's swing reaches (blocks from her middle to the enemy's edge): her claymore at its biggest. */
 	private static final double BURST_SWING_REACH = 6.0;
@@ -69,11 +71,14 @@ public class NoelleEntity extends CompanionEntity {
 			new ComboHit("animation.noelle.attack4", 0.75, 0.625, 0.625));
 	private static final RawAnimation COMBO_END = RawAnimation.begin().thenPlay("animation.noelle.combo_end");
 	/**
-	 * Her charged attack ("animation.noelle.charged"), every second combo in place of starting over: switched on once
-	 * it's animated (its length and the moments it hits come from the animation).
+	 * Her charged attack: the wind-up (charged_attack 0-1 s), the spin (charged_spin, exactly two turns in 0.85 s,
+	 * looped) and the finish (charged_attack 3.58 s to the end, its big swing landing 0.67 s in), cut apart by
+	 * tools/cut_anim.py.
 	 */
-	@javax.annotation.Nullable
-	private static final ComboHit CHARGED = null;
+	private static final ChargedAttack CHARGED = new ChargedAttack(
+			RawAnimation.begin().thenPlayAndHold("animation.noelle.charged_start"), 20,
+			RawAnimation.begin().thenLoop("animation.noelle.charged_spin"), 17,
+			RawAnimation.begin().thenPlayAndHold("animation.noelle.charged_finish"), 43, 13);
 
 	private int shieldTicks;
 	private int burstTicks;
@@ -149,14 +154,21 @@ public class NoelleEntity extends CompanionEntity {
 		skillBlastIn = SKILL_BLAST_TICKS;   // the stone bursts out on the animation's beat, not at the first frame
 	}
 
-	/** All the way round her, at half her claymore's reach: not a swing, the stone bursting out of her. */
+	/** All the way round her, 2 blocks out: not a swing, the stone bursting out of her, and it shoves hard (1.5x). */
 	private void skillBlast() {
-		double reach = meleeReach() * 0.5;
+		double reach = SKILL_REACH;
 		float damage = 2.0F + (float) getAttributeValue(Attributes.ARMOR) * 0.4F;
 		for (LivingEntity near : level().getEntitiesOfClass(LivingEntity.class, getBoundingBox().inflate(reach + 1.0, 1.0, reach + 1.0),
 				e -> e != this && e instanceof Enemy && e.isAlive() && !(e instanceof TamableAnimal pet && pet.isTame())
 						&& Math.sqrt(e.distanceToSqr(getX(), e.getY(), getZ())) <= reach + e.getBbWidth() / 2.0)) {
-			near.hurt(damageSources().mobAttack(this), damage);
+			if (near.hurt(damageSources().mobAttack(this), damage)) {
+				// The hit's own knockback (0.4) half again: add 0.2 more straight away from her.
+				Vec3 away = new Vec3(near.getX() - getX(), 0, near.getZ() - getZ());
+				if (away.lengthSqr() > 1.0E-6) {
+					near.setDeltaMovement(near.getDeltaMovement().add(away.normalize().scale(0.2)));
+					near.hurtMarked = true;
+				}
+			}
 		}
 		if (level() instanceof ServerLevel server) {
 			Fx.shards(server, Blocks.GOLD_BLOCK.defaultBlockState(), position().add(0, 0.6, 0), 40, 0.6);
@@ -207,14 +219,15 @@ public class NoelleEntity extends CompanionEntity {
 			sound(SoundEvents.PLAYER_ATTACK_SWEEP, 1.0F, 0.6F);
 			sound(SoundEvents.ANVIL_LAND, 0.6F, 0.7F);
 		}
-		double upTo = -90.0 + 180.0 * (swingStep + 1) / SWING_STEPS;
+		// Across the way her claymore goes in the animation: from +90 (where the swing starts) down to -90.
+		double downTo = 90.0 - 180.0 * (swingStep + 1) / SWING_STEPS;
 		float damage = 4.0F + (float) getAttributeValue(Attributes.ARMOR) * 0.6F;
 		for (LivingEntity near : level().getEntitiesOfClass(LivingEntity.class, getBoundingBox().inflate(BURST_SWING_REACH + 1.0, 1.5, BURST_SWING_REACH + 1.0),
 				e -> e != this && e instanceof Enemy && e.isAlive() && !(e instanceof TamableAnimal pet && pet.isTame())
 						&& !swingHit.contains(e.getUUID()))) {
 			double distance = Math.sqrt(near.distanceToSqr(getX(), near.getY(), getZ()));
 			double angle = Mth.wrapDegrees(Mth.atan2(near.getZ() - getZ(), near.getX() - getX()) * Mth.RAD_TO_DEG - 90.0 - yBodyRot);
-			if (distance <= BURST_SWING_REACH + near.getBbWidth() / 2.0 && angle >= -90.0 && angle <= upTo) {
+			if (distance <= BURST_SWING_REACH + near.getBbWidth() / 2.0 && angle <= 90.0 && angle >= downTo) {
 				swingHit.add(near.getUUID());
 				near.hurt(damageSources().mobAttack(this), damage);
 				if (server != null) {
@@ -225,7 +238,7 @@ public class NoelleEntity extends CompanionEntity {
 		if (server != null) {
 			// This step's slice of the gold crescent, out to the swing's reach.
 			Vec3 from = position().add(0, 1.0, 0);
-			float sliceYaw = (float) (yBodyRot + upTo - 90.0 / SWING_STEPS);
+			float sliceYaw = (float) (yBodyRot + downTo + 90.0 / SWING_STEPS);
 			Fx.arc(server, element().dust(), from, sliceYaw, BURST_SWING_REACH * 0.85, 180.0 / SWING_STEPS, 5, 0.3);
 			Fx.arc(server, element().dust(), from, sliceYaw, BURST_SWING_REACH * 0.55, 180.0 / SWING_STEPS, 3, 0.2);
 			Fx.arc(server, ParticleTypes.WAX_OFF, from, sliceYaw, BURST_SWING_REACH * 0.7, 180.0 / SWING_STEPS, 2, 0.3);
@@ -273,15 +286,30 @@ public class NoelleEntity extends CompanionEntity {
 	 */
 	@Override
 	protected double cleaveArc(int hit) {
-		if (hit >= COMBO.size()) {
-			return 360;   // the charged attack spins all the way round
-		}
 		return burstActive() ? 0 : lastHit(hit) ? 50 : 150;
 	}
 
 	@Override
-	protected ComboHit chargedHit() {
+	protected ChargedAttack chargedAttack() {
 		return CHARGED;
+	}
+
+	/** The spin: a whirl of gold all round her each hit; the finish: a heavy ring, stone shards, a deep hit. */
+	@Override
+	protected void onChargedHit(boolean finish) {
+		if (level() instanceof ServerLevel server) {
+			double reach = meleeReach() * meleeReachScale() * (finish ? 1.25 : 1.0);
+			Fx.ring(server, element().dust(), position().add(0, finish ? 0.2 : 0.9, 0), reach, finish ? 40 : 22);
+			if (finish) {
+				Fx.shards(server, Blocks.GOLD_BLOCK.defaultBlockState(), position().add(0, 0.4, 0), 30, 1.2);
+			}
+		}
+		if (finish) {
+			sound(SoundEvents.PLAYER_ATTACK_STRONG, 1.0F, 0.6F);
+			sound(SoundEvents.ANVIL_LAND, 0.4F, 0.8F);
+		} else {
+			sound(SoundEvents.PLAYER_ATTACK_SWEEP, 0.6F, 0.8F + random.nextFloat() * 0.2F);
+		}
 	}
 
 	/** Her last, downward hit lands one harder. */

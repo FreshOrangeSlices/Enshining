@@ -12,6 +12,7 @@ import net.minecraft.util.Mth;
 import software.bernie.geckolib.cache.object.GeoBone;
 import software.bernie.geckolib.core.animatable.model.CoreGeoBone;
 import software.bernie.geckolib.core.animation.Animation;
+import software.bernie.geckolib.core.animation.AnimationController;
 import software.bernie.geckolib.core.animation.AnimationProcessor;
 import software.bernie.geckolib.core.animation.AnimationState;
 import software.bernie.geckolib.core.keyframe.BoneAnimation;
@@ -35,9 +36,14 @@ public class CompanionModel<T extends CompanionEntity> extends DefaultedEntityGe
 		if (current == null) {
 			return Set.of();
 		}
-		return rotatedBones.computeIfAbsent(current.animation(), animation -> {
+		return bonesOf(current.animation());
+	}
+
+	/** Every bone an animation keys (cached). */
+	private Set<String> bonesOf(Animation animation) {
+		return rotatedBones.computeIfAbsent(animation, a -> {
 			Set<String> names = new HashSet<>();
-			for (BoneAnimation bone : animation.boneAnimations()) {
+			for (BoneAnimation bone : a.boneAnimations()) {
 				names.add(bone.boneName());
 			}
 			return names;
@@ -110,6 +116,7 @@ public class CompanionModel<T extends CompanionEntity> extends DefaultedEntityGe
 			head.setRotY(baseY + animY + limitLook(lookY, animY, 1.3F));
 		}
 		weapons(companion, state, scaledBones(state));
+		props(companion, instanceId, state.getPartialTick());
 		vanillaLimbs(companion, state, animated);
 
 		// The whole skirt sways a little with each step and breathes when still, heavier when running or in the air
@@ -132,6 +139,58 @@ public class CompanionModel<T extends CompanionEntity> extends DefaultedEntityGe
 				bone.setHidden(true);
 			}
 		}
+	}
+
+	/**
+	 * Props (everything in the "props" group: her couch, her tea set...) belong to the animations that use them:
+	 * each one shows only while a playing animation (any of her controllers: the sitting idle has its own) keys it
+	 * or anything inside it, and appears and vanishes like her weapons (grows in over 0.2 s with a sparkle).
+	 */
+	private void props(T companion, long instanceId, float partialTick) {
+		CoreGeoBone props = getAnimationProcessor().getBone("props");
+		if (props == null) {
+			return;
+		}
+		Set<String> keyed = new HashSet<>();
+		Set<String> scaled = new HashSet<>();
+		var manager = companion.getAnimatableInstanceCache().getManagerForId(instanceId);
+		for (var controller : manager.getAnimationControllers().values()) {
+			AnimationProcessor.QueuedAnimation current = controller.getCurrentAnimation();
+			if (current == null || controller.getAnimationState() == AnimationController.State.STOPPED) {
+				continue;
+			}
+			keyed.addAll(bonesOf(current.animation()));
+			for (BoneAnimation bone : current.animation().boneAnimations()) {
+				if (keysScale(bone)) {
+					scaled.add(bone.boneName());
+				}
+			}
+		}
+		float time = companion.tickCount + partialTick;
+		float dt = companion.propLastTime == 0 ? 1 : Mth.clamp(time - companion.propLastTime, 0, 5);
+		companion.propLastTime = time;
+		for (CoreGeoBone prop : props.getChildBones()) {
+			boolean wanted = keyed.contains("props") || keyedWithin(prop, keyed);
+			float in = Mth.approach(companion.propIn.getOrDefault(prop.getName(), 0.0F), wanted ? 1 : 0, dt / 4.0F);
+			companion.propIn.put(prop.getName(), in);
+			companion.propWanted.put(prop.getName(), wanted);
+			prop.setHidden(in <= 0);
+			if (in > 0) {
+				materialise(prop, in, scaled.contains(prop.getName()));
+			}
+		}
+	}
+
+	private static boolean keyedWithin(CoreGeoBone bone, Set<String> keyed) {
+		if (keyed.contains(bone.getName())) {
+			return true;
+		}
+		for (CoreGeoBone child : bone.getChildBones()) {
+			if (keyedWithin(child, keyed)) {
+				return true;
+			}
+		}
+		return false;
 	}
 
 	/**

@@ -73,22 +73,28 @@ Nothing here is built yet unless marked done. Order is roughly the order we'll d
   `flow_` bangs; eyes (`eyes_open` / `eyes_half` / `eyes_closed`); move `weapon_back_model` where you like it.
 - Animations: skill, jog, idle fidgets; later `weapon_aura` for the burst.
 
-### Next game update (ON HOLD until the user's new animations are done; don't push game changes before)
-Tested 2026-11-18. Confirmed good: brightness 0.25, claymore always shows, menu loop, burst speed and reach, bows,
-blinks, zoom/linger, skirt, belt, last hit. Declined: gold flecks, menu sparkles, summon chime (annoying).
-- Import the new animations; re-check skill/burst/combo hit times and lengths against them.
-- Burst damage sweeps LEFT to RIGHT (her swing; it's right to left now): flip the sweep order in tickSwing.
-- Skill: 360 degrees, about 2 blocks out (not half her reach), knockback 1.5x.
-- Menu poses: blend into the pose more slowly (snaps in too fast; now 5 ticks).
-- Given weapons hovering on her back sit inside her: move them out behind her (a `weapon_back_grip` bone).
-- Odd-pivot items (trident) look wrong at `weapon_grip`: draw those the vanilla third-person way instead.
-- Charged attack, if animated by then.
+### Update 2026-11-19 (done, from the user's v9 -> model v10)
+- Texture 256x256 (was 128 wide; old pixels stay put, the right half is free for props).
+- `props` group (was `Idle`): couch (1x) and tea set (4x) in the right half, plain placeholder colours. A prop
+  shows only while a playing animation keys it or anything inside it (any controller), growing in with a sparkle.
+- Sitting: `animation.companion.sit_idle` (was idle3) loops on its own controller over the sit pose: the one meant
+  to bring out the props. Fidgets (`animation.companion.idle_...`, idle2 is now `idle_2`): every 4-6 min idle.
+- Walk = the user's new walk (NEW_WALK_DAMNIT); empty `new` deleted; new jump.
+- Run: breaking into a run after 2 s+ of walking/standing = a 1.5 s dash (`run`, 1.35x speed), then `jog` at the
+  normal running speed.
+- Charged attack (`animation.noelle.charged_attack`, cut by tools/cut_anim.py into charged_start 0-1 s and
+  charged_finish 3.58 s-end; `charged_spin` trimmed to exactly 720 degrees in 0.85 s): after the last combo hit
+  with an enemy in reach, every second time or when surrounded (3+ within 4 blocks). Wind-up (planted), spin at
+  sneak speed hitting all round her every 0.5 s (60% of her attack; at least 2 loops, on while anything's in reach,
+  6 at most), finish (planted) 1.5x her attack all round her at 1.25x reach, 0.67 s in.
+- Burst damage sweeps the other way (matching the swing). Skill: all round her 2 blocks out, 1.5x knockback.
+- Menu poses blend in over 12 ticks (was 5). Given weapons hover at `weapon_back_grip` (on the hovering claymore's
+  handle) instead of inside her back. Trident: left as is (user: not worth it).
 
 ### Pinned: waiting on you
 - Menu pose jump: the cut times were right (`menu_armor` 0.42 s, `menu_weapon` 0.96 s); GeckoLib's own
   start-then-loop let her drop toward rest when the loop began. Fixed: the menu holds the start's last frame and
   switches to the loop itself, with no blend. Check it in game.
-- Charged attack: animate `animation.noelle.charged`; I switch it on with its length and hit moments.
 - Paint the belt bow's new 3x spot and the mini shield's 5x7 faces (grey placeholder now).
 - Test Dummy: keep until Mark 1 is done, then out of the release? (unanswered)
 

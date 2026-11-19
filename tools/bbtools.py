@@ -67,7 +67,7 @@ class Project:
         walk(self.nodes[name])
         return out
 
-    def free_spot(self, w, h, start_row=64):
+    def free_spot(self, w, h, start_row=64, start_col=0):
         """Top-left of a free W x H block on the texture: no face reads it and nothing is painted there."""
         W, H = self.tex.size
         taken = np.zeros((H, W), bool)
@@ -84,7 +84,7 @@ class Project:
                 taken[int(math.floor(min(b, d))):int(math.ceil(max(b, d))), int(math.floor(min(a, c))):int(math.ceil(max(a, c)))] = True
         taken |= np.array(self.tex.getchannel('A')) > 0
         for y in range(start_row, H - h + 1):
-            for x in range(0, W - w + 1):
+            for x in range(start_col, W - w + 1):
                 if not taken[y:y + h + 1, x:x + w + 1].any():   # with a pixel to spare right and below
                     return x, y
         raise SystemExit(f'no free {w}x{h} space on the texture')

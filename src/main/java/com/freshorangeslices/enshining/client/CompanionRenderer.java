@@ -55,6 +55,8 @@ public class CompanionRenderer<T extends CompanionEntity> extends GeoEntityRende
 	 * spot at "right_hand".
 	 */
 	private static final String GRIP = "weapon_grip";
+	/** The same for a weapon you gave her hovering behind her: on the hovering claymore's handle, blade along -Z. */
+	private static final String BACK_GRIP = "weapon_back_grip";
 	/**
 	 * A vanilla handheld item's sprite (handle bottom-left, tip top-right) turned so its diagonal points along -Z
 	 * with its flat facing sideways, then moved so the point a player's fist holds (worked back from the vanilla
@@ -106,7 +108,9 @@ public class CompanionRenderer<T extends CompanionEntity> extends GeoEntityRende
 	/** The bones holding her claymore's cubes, in hand and hovering behind her (tracked for the sparkle). */
 	private final List<GeoBone> handBlade = new ArrayList<>(), backBlade = new ArrayList<>();
 	@Nullable
-	private GeoBone gripBone;
+	private GeoBone gripBone, backGripBone;
+	/** Each prop (a child of "props") and the bones of it that have cubes, for its sparkle. */
+	private final Map<String, List<GeoBone>> propBones = new HashMap<>();
 	@Nullable
 	private GeoBone headBone;
 
@@ -161,14 +165,16 @@ public class CompanionRenderer<T extends CompanionEntity> extends GeoEntityRende
 				return switch (bone.getName()) {
 					case GRIP -> inHand ? companion.getMainHandItem() : null;
 					case "right_hand" -> gripBone == null && inHand ? companion.getMainHandItem() : null;
-					case "weapon_back" -> companion.showBackWeapon() ? companion.getMainHandItem() : null;
+					case BACK_GRIP -> companion.showBackWeapon() ? companion.getMainHandItem() : null;
+					case "weapon_back" -> backGripBone == null && companion.showBackWeapon() ? companion.getMainHandItem() : null;
 					default -> null;
 				};
 			}
 
 			@Override
 			protected ItemDisplayContext getTransformTypeForStack(GeoBone bone, ItemStack stack, T companion) {
-				return GRIP.equals(bone.getName()) ? ItemDisplayContext.NONE : ItemDisplayContext.THIRD_PERSON_RIGHT_HAND;
+				return GRIP.equals(bone.getName()) || BACK_GRIP.equals(bone.getName()) ? ItemDisplayContext.NONE
+						: ItemDisplayContext.THIRD_PERSON_RIGHT_HAND;
 			}
 
 			@Override
@@ -181,6 +187,11 @@ public class CompanionRenderer<T extends CompanionEntity> extends GeoEntityRende
 					float grown = (in >= 1 ? 1 : in * in * (3 - 2 * in)) * GRIP_SCALE;
 					poseStack.mulPose(GRIP_TURN);
 					poseStack.scale(grown, grown, grown);
+					poseStack.translate(GRIP_FIST, GRIP_FIST, 0.0F);
+				} else if (BACK_GRIP.equals(bone.getName())) {
+					// Hovering behind her like her claymore, on its handle (the bone floats and fades it in).
+					poseStack.mulPose(GRIP_TURN);
+					poseStack.scale(GRIP_SCALE, GRIP_SCALE, GRIP_SCALE);
 					poseStack.translate(GRIP_FIST, GRIP_FIST, 0.0F);
 				} else if ("right_hand".equals(bone.getName())) {
 					// Held like a player holds it: blade forward out of the fist.
@@ -249,6 +260,18 @@ public class CompanionRenderer<T extends CompanionEntity> extends GeoEntityRende
 			if (gripBone != null) {
 				gripBone.setTrackingMatrices(true);
 			}
+			backGripBone = model.getBone(BACK_GRIP).orElse(null);
+			if (backGripBone != null) {
+				backGripBone.setTrackingMatrices(true);
+			}
+			propBones.clear();
+			model.getBone("props").ifPresent(props -> {
+				for (GeoBone prop : props.getChildBones()) {
+					List<GeoBone> bones = new ArrayList<>();
+					bladeBones(prop, bones);
+					propBones.put(prop.getName(), bones);
+				}
+			});
 			headBone = model.getBone("pupil_left").or(() -> model.getBone("pupil_right")).isPresent()
 					? model.getBone("head").orElse(null) : null;   // only models with moving eyes need it
 			if (headBone != null) {
@@ -277,7 +300,17 @@ public class CompanionRenderer<T extends CompanionEntity> extends GeoEntityRende
 				}
 			}
 			if (companion.backWeaponIn > 0 && companion.backWeaponIn < 1) {
-				sparkle(companion, backBlade, frame, companion.backWeaponWanted);
+				if (companion.holdsSwappedWeapon() && backGripBone != null) {
+					sparkleAlong(companion, backGripBone, frame, companion.backWeaponWanted);
+				} else {
+					sparkle(companion, backBlade, frame, companion.backWeaponWanted);
+				}
+			}
+			for (var prop : propBones.entrySet()) {
+				float in = companion.propIn.getOrDefault(prop.getKey(), 0.0F);
+				if (in > 0 && in < 1) {
+					sparkle(companion, prop.getValue(), frame, companion.propWanted.getOrDefault(prop.getKey(), false));
+				}
 			}
 		}
 	}
