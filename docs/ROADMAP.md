@@ -80,7 +80,7 @@ Nothing here is built yet unless marked done. Order is roughly the order we'll d
 - Sitting: `animation.companion.sit_idle` (was idle3) loops on its own controller over the sit pose: the one meant
   to bring out the props. Fidgets (`animation.companion.idle_...`, idle2 is now `idle_2`): every 4-6 min idle.
 - Walk = the user's new walk (NEW_WALK_DAMNIT); empty `new` deleted; new jump.
-- Run: breaking into a run after 2 s+ of walking/standing = a 1.5 s dash (`run`, 1.35x speed), then `jog` at the
+- Run: breaking into a run after 2 s+ of walking/standing = a 0.5 s dash (`run`, 1.35x speed), then `jog` at the
   normal running speed.
 - Charged attack (`animation.noelle.charged_attack`, cut by tools/cut_anim.py into charged_start 0-1 s and
   charged_finish 3.58 s-end; `charged_spin` trimmed to exactly 720 degrees in 0.85 s): after the last combo hit

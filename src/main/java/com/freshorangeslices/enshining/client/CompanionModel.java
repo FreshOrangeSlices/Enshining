@@ -95,7 +95,7 @@ public class CompanionModel<T extends CompanionEntity> extends DefaultedEntityGe
 		// and the vanilla limb swing and head turn went on top of every attack.
 		var main = companion.getAnimatableInstanceCache().getManagerForId(instanceId).getAnimationControllers().get("main");
 		if (main != null) {
-			state.withController((AnimationController<T>) main);
+			state.withController((AnimationController<T>) (Object) main);
 		}
 		// GeckoLib's head turn REPLACES the head's rotation with the look direction, which would wipe out head keys
 		// from Blockbench. By this point GeckoLib has already written this frame's animation into the head (keyed, or

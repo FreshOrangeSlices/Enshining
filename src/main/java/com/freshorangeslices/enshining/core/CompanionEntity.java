@@ -79,9 +79,9 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 	public static final int SHOW_ARMOR = 1, SHOW_WEAPON = 2, SKILL_ON = 4, BURST_ON = 8;
 	private static final int DEFAULT_SETTINGS = SHOW_ARMOR | SHOW_WEAPON | SKILL_ON | BURST_ON;
 	private static final UUID WEAPON_SWAP = UUID.fromString("5e3b1c2a-7d41-4c55-9a0e-0e1a1f000004");
-	/** The dash at the start of a run: 1.35x speed for 1.5 s, only after 2 s of walking or standing. */
+	/** The dash at the start of a run: 1.35x speed for 0.5 s, only after 2 s of walking or standing. */
 	private static final UUID DASH_SPEED = UUID.fromString("5e3b1c2a-7d41-4c55-9a0e-0e1a1f000007");
-	private static final int DASH_TICKS = 30, DASH_AFTER_CALM = 40;
+	private static final int DASH_TICKS = 10, DASH_AFTER_CALM = 40;
 	private int dashTicks, calmTicks = DASH_AFTER_CALM;
 	/** Half speed while her burst plays. */
 	private static final UUID BURST_SLOW = UUID.fromString("5e3b1c2a-7d41-4c55-9a0e-0e1a1f000005");
@@ -1112,7 +1112,7 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 		}
 		entityData.set(COMBAT, combatTicks > 0);
 		// Sprinting (synced) while chasing or catching up, so clients pick the run animation; strolling stays a walk.
-		// Breaking into a run after 2 s or more of walking or standing starts with a 1.5 s dash at 1.35x speed
+		// Breaking into a run after 2 s or more of walking or standing starts with a 0.5 s dash at 1.35x speed
 		// (the run animation), then she jogs at her normal running speed.
 		boolean running = !comboActive && getNavigation().isInProgress() && getMoveControl().getSpeedModifier() >= 1.05;
 		if (running && !isSprinting() && calmTicks >= DASH_AFTER_CALM) {
