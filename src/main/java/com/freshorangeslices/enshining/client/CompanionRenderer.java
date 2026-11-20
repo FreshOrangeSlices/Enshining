@@ -272,6 +272,9 @@ public class CompanionRenderer<T extends CompanionEntity> extends GeoEntityRende
 					propBones.put(prop.getName(), bones);
 				}
 			});
+			for (GeoBone bone : model.topLevelBones()) {
+				propsNamed(bone);
+			}
 			headBone = model.getBone("pupil_left").or(() -> model.getBone("pupil_right")).isPresent()
 					? model.getBone("head").orElse(null) : null;   // only models with moving eyes need it
 			if (headBone != null) {
@@ -357,6 +360,18 @@ public class CompanionRenderer<T extends CompanionEntity> extends GeoEntityRende
 			} else {
 				companion.level().addParticle(companion.element().dust(), world.x(), world.y(), world.z(), 0, -0.01, 0);
 			}
+		}
+	}
+
+	/** Every "prop_..." group, wherever it is (in her hand, say), with the bones of it that have cubes. */
+	private void propsNamed(GeoBone bone) {
+		if (bone.getName().startsWith("prop_")) {
+			List<GeoBone> bones = new ArrayList<>();
+			bladeBones(bone, bones);
+			propBones.put(bone.getName(), bones);
+		}
+		for (GeoBone child : bone.getChildBones()) {
+			propsNamed(child);
 		}
 	}
 

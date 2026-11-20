@@ -1,6 +1,8 @@
 package com.freshorangeslices.enshining.client;
 
+import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.List;
 import java.util.IdentityHashMap;
 import java.util.Map;
 import java.util.Set;
@@ -150,13 +152,14 @@ public class CompanionModel<T extends CompanionEntity> extends DefaultedEntityGe
 	}
 
 	/**
-	 * Props (everything in the "props" group: her couch, her tea set...) belong to the animations that use them:
-	 * each one shows only while a playing animation (any of her controllers: the sitting idle has its own) keys it
-	 * or anything inside it, and appears and vanishes like her weapons (grows in over 0.2 s with a sparkle).
+	 * Props (each group inside "props", like her couch, and any group named "prop_..." wherever it is, like the
+	 * teapot in her hand) belong to the animations that use them: each one shows only while a playing animation (any
+	 * of her controllers: the sitting idle has its own) keys it or anything inside it, and appears and vanishes like
+	 * her weapons (grows in over 0.2 s with a sparkle).
 	 */
 	private void props(T companion, long instanceId, float partialTick) {
-		CoreGeoBone props = getAnimationProcessor().getBone("props");
-		if (props == null) {
+		List<CoreGeoBone> found = props();
+		if (found.isEmpty()) {
 			return;
 		}
 		Set<String> keyed = new HashSet<>();
@@ -177,8 +180,9 @@ public class CompanionModel<T extends CompanionEntity> extends DefaultedEntityGe
 		float time = companion.tickCount + partialTick;
 		float dt = companion.propLastTime == 0 ? 1 : Mth.clamp(time - companion.propLastTime, 0, 5);
 		companion.propLastTime = time;
-		for (CoreGeoBone prop : props.getChildBones()) {
-			boolean wanted = keyed.contains("props") || keyedWithin(prop, keyed);
+		for (CoreGeoBone prop : found) {
+			boolean wanted = keyedWithin(prop, keyed) || keyed.contains("props") && prop.getParent() != null
+					&& "props".equals(prop.getParent().getName());
 			float in = Mth.approach(companion.propIn.getOrDefault(prop.getName(), 0.0F), wanted ? 1 : 0, dt / 4.0F);
 			companion.propIn.put(prop.getName(), in);
 			companion.propWanted.put(prop.getName(), wanted);
@@ -187,6 +191,18 @@ public class CompanionModel<T extends CompanionEntity> extends DefaultedEntityGe
 				materialise(prop, in, scaled.contains(prop.getName()));
 			}
 		}
+	}
+
+	/** Her props: the groups inside "props" and every "prop_..." group. */
+	private List<CoreGeoBone> props() {
+		List<CoreGeoBone> found = new ArrayList<>();
+		for (CoreGeoBone bone : getAnimationProcessor().getRegisteredBones()) {
+			boolean inProps = bone.getParent() != null && "props".equals(bone.getParent().getName());
+			if (inProps || bone.getName().startsWith("prop_")) {
+				found.add(bone);
+			}
+		}
+		return found;
 	}
 
 	private static boolean keyedWithin(CoreGeoBone bone, Set<String> keyed) {

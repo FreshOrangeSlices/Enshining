@@ -91,6 +91,14 @@ Nothing here is built yet unless marked done. Order is roughly the order we'll d
 - Menu poses blend in over 12 ticks (was 5). Given weapons hover at `weapon_back_grip` (on the hovering claymore's
   handle) instead of inside her back. Trident: left as is (user: not worth it).
 
+### Model v11 (2026-11-19, from the user's v10)
+- Tea set: the user's bigger copies kept and grown 1.5x more, the tiny first ones deleted. `prop_teapot` sits in
+  her right hand (handle in the fist, at `weapon_grip`), `prop_teacup` (plate + cup) in front of her left fist;
+  both pivot on the hand. Any group named `prop_...` anywhere is a prop now (shows only while an animation keys
+  it); `props` keeps the couch. sit_idle: the old teapot's turn keys moved onto prop_teapot (its position keys
+  were for where the props used to be and are gone); one scale key on each hand prop so they show.
+- Props packed tight into the top of the right half (rows 0-92; `tools/repack.py`), the user's paint carried over.
+
 ### Pinned: waiting on you
 - Menu pose jump: the cut times were right (`menu_armor` 0.42 s, `menu_weapon` 0.96 s); GeckoLib's own
   start-then-loop let her drop toward rest when the loop began. Fixed: the menu holds the start's last frame and
