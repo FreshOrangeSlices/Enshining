@@ -1064,6 +1064,25 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 		return speed;
 	}
 
+	/** Hopping out: Steve steps out at her side (right, left, then behind), not on top of her head. */
+	@Override
+	public Vec3 getDismountLocationForPassenger(LivingEntity passenger) {
+		for (float turn : new float[] {90.0F, -90.0F, 180.0F}) {
+			Vec3 away = getCollisionHorizontalEscapeVector(getBbWidth(), passenger.getBbWidth(), getYRot() + turn);
+			Vec3 spot = position().add(away.x, 0.0, away.z);
+			if (level().noCollision(passenger, passenger.getDimensions(net.minecraft.world.entity.Pose.STANDING).makeBoundingBox(spot))) {
+				return spot;
+			}
+		}
+		return position();
+	}
+
+	/** Underwater you stay her (vanilla pops riders out of some mounts underwater). */
+	@Override
+	public boolean dismountsUnderwater() {
+		return false;
+	}
+
 	@Override
 	public void travel(Vec3 travelVector) {
 		if (isOffField()) {

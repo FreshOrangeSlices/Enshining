@@ -74,6 +74,13 @@ jobs:
           for n, chunk in enumerate([text[i:i + 3900] for i in range(0, len(text), 3900)][:10]):
               print(f"::error title=build-errors-{n:02d}::{esc(chunk)}")
           PY
+      # The camera mixin only runs on players' clients, so show its mapping here (it must name an SRG method).
+      - name: show the jar's mixin wiring
+        if: success()
+        run: |
+          jar=$(ls build/libs/*.jar | grep -v -- '-sources\|-slim' | head -1)
+          unzip -p "$jar" META-INF/MANIFEST.MF | grep -i mixin || echo "no MixinConfigs in the manifest"
+          unzip -p "$jar" enshining.refmap.json || echo "no refmap in the jar"
       # The jar to install, whenever it was built.
       - name: capture the Enshining jar
         if: always() && hashFiles('build/libs/*.jar') != ''
