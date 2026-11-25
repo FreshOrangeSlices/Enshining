@@ -2007,12 +2007,16 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 	 * window (unless she's moving, then the legs take over); the ending plays once. Null means no combo is showing.
 	 */
 	@Nullable
+	/** Client side: the combo phase the main controller is showing (a hit 1..n, or the ending). */
+	private int comboShownPhase;
+
 	private PlayState comboState(software.bernie.geckolib.core.animation.AnimationState<CompanionEntity> state) {
 		int packed = entityData.get(COMBO);
 		int phase = packed & 7;
 		int count = packed >>> 3;
 		if (phase == 0) {
 			comboSeen = count;
+			comboShownPhase = 0;
 			return null;
 		}
 		RawAnimation animation = phase == COMBO_END_PHASE ? comboEndAnimation()
@@ -2022,7 +2026,16 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 		}
 		var controller = state.getController();
 		if (count != comboSeen) {
+			// Her ending waits for the last hit to finish on screen. The server starts the ending on its own clock, 0.75 s
+			// after the hit; the hit started here a few ticks later (the update's trip, then its blend in), so switching
+			// at once cut off its downward chop (hit 4 looked like a sweep that jumped to the sword on the floor).
+			boolean hitStillPlaying = comboShownPhase >= 1 && comboShownPhase <= comboHits().size()
+					&& !controller.hasAnimationFinished() && controller.getAnimationState() != AnimationController.State.PAUSED;
+			if (phase == COMBO_END_PHASE && hitStillPlaying) {
+				return PlayState.CONTINUE;
+			}
 			comboSeen = count;
+			comboShownPhase = phase;
 			// Start the blend into the next hit from the same pose counted within one turn, so a pose like 240 degrees
 			// meets a hit starting at -120 (the same angle) without the sword whirling all the way round.
 			unwindSnapshots();
@@ -2036,6 +2049,7 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 		boolean done = !state.isCurrentAnimation(animation) || controller.hasAnimationFinished()
 				|| controller.getAnimationState() == AnimationController.State.PAUSED;
 		if (phase == COMBO_END_PHASE ? done : (done && state.isMoving()) || !state.isCurrentAnimation(animation)) {
+			comboShownPhase = 0;   // the combo isn't on screen any more (walking took over): nothing to wait for
 			return null;
 		}
 		return PlayState.CONTINUE;
