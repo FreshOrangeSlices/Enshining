@@ -123,8 +123,24 @@ Nothing here is built yet unless marked done. Order is roughly the order we'll d
   Never below her: from her feet up, 3 blocks tall (her height + 1).
 - Camera 6 blocks back; asked whether it can pass through walls (vanilla pulls it in front of them).
 - Singleplayer first, servers eventually.
-- Open (follow-ups sent 2026-11-24): her health vs yours, getting in, the key map, charged attack on hold,
-  stamina, hardness scaling, blocks never broken, a mining on/off key, digging down, wall clipping, test order.
+- Second round (2026-11-24): hits land on her, yours untouched; she falls -> Steve pops out 2 s later. In from her
+  menu; party keys 1-4 now (Test Dummy back as a second member). Genshin keys: WASD/Space, Left Shift sprint
+  (dash then jog), left click attack + mine, hold = charged (tap under ~0.3 s = normal hit; let go within 1 s =
+  wind-up straight into the finish, no spin; mid-spin = finish the turn, then the finish; no new animation needed,
+  the spin is exactly 720), E skill, Q burst, F interact, Z mining on/off (on by default), scroll zoom, J out; Esc,
+  T, F1-F3, F11 kept; everything else vanilla off (inventory, hotbar, drop, sneak, F5). Canceling (dash, jump,
+  skill, charged) cuts a hit short and restarts the combo at hit 1. Stamina: later. Mining: 25% a hit on every
+  block for now (iron-tool tier), never anything holding items; looking down, her swing takes only the layer under
+  her feet. Camera: passes through see-through blocks, stops at solid ones. Party Genshin-style: only the one you
+  play is out. Party = companions within 32 blocks in befriending order. All of it in the main build, after the
+  user's Mark 1 test.
+- Step 1 built on branch `play-as-her` (CI green, 15 tests; merge to main when the user is done testing): Play
+  button in her menu; you ride inside her hidden, hits redirected to her, her AI off (control flags); Genshin
+  movement (keys relative to the camera, she turns to face, walk 0.09 / jog 0.13 / dash 0.18 for 10 ticks); party
+  off-field (synced OFF_FIELD, never saved: hidden, no physics, untouchable, carried with the active one); 1-4 swap
+  (1 s cooldown); J out (Steve beside her); fall -> 2 s hidden; camera mixin on Camera.getMaxZoom (optional; refmap
+  m_90566_), zoom 3-10; Steve, hotbar, hearts, food, XP, crosshair hidden; party list on the right.
+- Next: step 2 = her attacks, charged hold, skill and burst on keys, canceling, F; step 3 = mining.
 
 ### Pinned: waiting on you
 - Menu pose jump: the cut times were right (`menu_armor` 0.42 s, `menu_weapon` 0.96 s); GeckoLib's own
