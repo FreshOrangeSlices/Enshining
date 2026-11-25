@@ -59,10 +59,14 @@ public class CompanionScreen extends AbstractContainerScreen<CompanionMenu> {
 	private int focusHold;             // ticks a focus stays after you stop hovering, or after something is equipped
 	/** After you stop hovering a slot, its close-up lingers 4 s; after equipping something, 6.5 s. */
 	private static final int HOVER_LINGER = 80, EQUIP_LINGER = 130;
+	/** A pose's start: blended into over this many ticks, then played at this speed (both slowed by it). */
+	private static final int INTRO_BLEND = 4;
+	private static final double INTRO_SPEED = 0.5;
 	private float follow = 1.0F, followO = 1.0F;   // how much she follows the cursor (0 while she poses), eased
 	private Focus posing;                          // the pose playing, and for how many ticks
 	private int poseTicks;
 	private boolean poseLooping;                   // past its start, into the repeating part
+	private boolean poseStarting;                  // playing a pose's start (slowed, see INTRO_SPEED)
 	private float zoom, zoomO;         // 0 = full body, 1 = fully zoomed (eased)
 	private float aimY, aimYO;         // the body height (blocks) the camera centres on
 	private final ItemStack[] lastGear = new ItemStack[5];
@@ -154,6 +158,7 @@ public class CompanionScreen extends AbstractContainerScreen<CompanionMenu> {
 	// ---- Poses and camera -------------------------------------------------------------------------------------
 
 	private RawAnimation pose(String wanted) {
+		poseStarting = false;
 		CompanionEntity real = menu.companion();
 		String name = wanted;
 		if (real != null) {
@@ -168,14 +173,18 @@ public class CompanionScreen extends AbstractContainerScreen<CompanionMenu> {
 			// and then tries to move on again, finds nothing, and lets her drop back toward her rest pose.
 			if (baked != null && baked.getAnimation(name + "_loop") != null) {
 				var intro = baked.getAnimation(name + "_intro");
-				if (intro != null && poseTicks < Math.ceil(intro.length())) {
+				// It starts only after its blend in, and both run at INTRO_SPEED: switch once both are done.
+				if (intro != null && poseTicks <= Math.ceil((INTRO_BLEND + intro.length()) / INTRO_SPEED) + 1) {
 					poseLooping = false;
+					poseStarting = true;
 					return RawAnimation.begin().thenPlayAndHold(name + "_intro");
 				}
 				poseLooping = true;
+				poseStarting = false;
 				return RawAnimation.begin().thenLoop(name + "_loop");
 			}
 			poseLooping = false;
+			poseStarting = false;
 			// A pose made to play once (like drawing the weapon) plays once and holds its last frame.
 			if (baked != null && baked.getAnimation(name) != null
 					&& baked.getAnimation(name).loopType() == software.bernie.geckolib.core.animation.Animation.LoopType.PLAY_ONCE) {
@@ -183,6 +192,11 @@ public class CompanionScreen extends AbstractContainerScreen<CompanionMenu> {
 			}
 		}
 		return RawAnimation.begin().thenLoop(name);
+	}
+
+	/** Ticks to blend into the pose playing: a start's short blend, none into its repeating part, else 12. */
+	private int blendInto() {
+		return poseStarting ? INTRO_BLEND : poseLooping ? 0 : 12;
 	}
 
 	@Override
@@ -223,14 +237,15 @@ public class CompanionScreen extends AbstractContainerScreen<CompanionMenu> {
 		}
 		switch (focus) {
 			// Her own weapon (or a swapped one) comes out; it's always there, so only the visibility toggle hides it.
-			// Into a pose over 12 ticks (5 snapped into place); from its start into its repeating part at once.
+			// Into a pose: its start at half speed (the starts move fast: her arm comes up in 0.2 s), after a short
+			// blend (their first frame is close to standing); then into the repeating part at once, at full speed.
 			case WEAPON -> {
 				RawAnimation pose = pose(MENU_WEAPON);
-				portrait.setMenuPose(pose, real.setting(CompanionEntity.SHOW_WEAPON), false, poseLooping ? 0 : 12);
+				portrait.setMenuPose(pose, true, false, blendInto(), poseStarting ? INTRO_SPEED : 1.0);
 			}
 			case ARMOR -> {
 				RawAnimation pose = pose(MENU_ARMOR);
-				portrait.setMenuPose(pose, false, true, poseLooping ? 0 : 12);   // eyes shut while she poses
+				portrait.setMenuPose(pose, false, true, blendInto(), poseStarting ? INTRO_SPEED : 1.0);   // eyes shut
 			}
 			default -> portrait.setMenuPose(pose(MENU_IDLE), false, false, 16);   // relaxes back over 0.8 s
 		}

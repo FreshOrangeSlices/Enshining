@@ -326,6 +326,22 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 		return CompanionMenu.isWeapon(getMainHandItem());
 	}
 
+	/**
+	 * Whether the weapon you gave her is what's drawn. The menu's weapon toggle is just the look: off, she keeps the
+	 * given weapon's damage but shows her own claymore.
+	 */
+	public boolean showsGivenWeapon() {
+		return holdsSwappedWeapon() && setting(SHOW_WEAPON);
+	}
+
+	/** Her jump: 1.5 blocks high (vanilla's is 1.25). */
+	private static final float JUMP_POWER = 0.465F;
+
+	@Override
+	protected float getJumpPower() {
+		return JUMP_POWER * getBlockJumpFactor();
+	}
+
 	private void updateWeaponSwap() {
 		var attack = getAttribute(Attributes.ATTACK_DAMAGE);
 		if (attack == null) {
@@ -435,6 +451,7 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 	@Nullable
 	private RawAnimation menuAnimation;
 	private int menuBlendTicks = 5;
+	private double menuSpeed = 1.0;
 	private boolean menuShowsWeapon;
 
 	/** Client side, menu portrait copies only: the pose to play (null = normal behaviour) and whether her weapon is out. */
@@ -449,7 +466,13 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 
 	/** ... and how many ticks she takes to blend into it. */
 	public void setMenuPose(@Nullable RawAnimation animation, boolean showWeapon, boolean eyesClosed, int blendTicks) {
+		setMenuPose(animation, showWeapon, eyesClosed, blendTicks, 1.0);
+	}
+
+	/** ... and how fast it plays (the blend in counts at that speed too). */
+	public void setMenuPose(@Nullable RawAnimation animation, boolean showWeapon, boolean eyesClosed, int blendTicks, double speed) {
 		menuBlendTicks = blendTicks;
+		menuSpeed = speed;
 		menuEyesClosed = eyesClosed;
 		menuAnimation = animation;
 		menuShowsWeapon = showWeapon;
@@ -1288,7 +1311,7 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 			if (menuAnimation != null) {
 				// A menu portrait copy: plays whatever pose the menu asks for.
 				playingMove = false;
-				state.getController().setAnimationSpeed(1.0);
+				state.getController().setAnimationSpeed(menuSpeed);
 				state.getController().setTransitionLength(menuBlendTicks);
 				return state.setAndContinue(menuAnimation);
 			}

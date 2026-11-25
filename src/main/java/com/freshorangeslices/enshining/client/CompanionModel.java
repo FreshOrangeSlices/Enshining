@@ -255,11 +255,11 @@ public class CompanionModel<T extends CompanionEntity> extends DefaultedEntityGe
 		if (dt != 0) {
 			companion.weaponLastTime = time;
 		}
-		boolean shown = companion.setting(CompanionEntity.SHOW_WEAPON);
 		// A weapon you gave her comes and goes exactly like her claymore (the renderer draws it instead of the
-		// claymore's cubes, at "weapon_grip"); her burst glow, in the claymore's bone, overlays either.
-		boolean hand = shown && companion.showsWeaponInHand();
-		boolean back = shown && companion.showBackWeapon();
+		// claymore's cubes, at "weapon_grip", unless the menu's weapon toggle keeps her claymore's look); her burst
+		// glow, in the claymore's bone, overlays either.
+		boolean hand = companion.showsWeaponInHand();
+		boolean back = companion.showBackWeapon();
 		// In her hand it's there at once (any grow-in reads as a delay at the start of a swing); the sparkle still
 		// plays over it for a moment. It still fades away over 0.2 s when she's done.
 		if (hand && !companion.handWeaponWanted && !snap) {

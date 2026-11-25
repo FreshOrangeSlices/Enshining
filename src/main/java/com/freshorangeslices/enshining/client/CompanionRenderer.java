@@ -157,7 +157,7 @@ public class CompanionRenderer<T extends CompanionEntity> extends GeoEntityRende
 			@Nullable
 			@Override
 			protected ItemStack getStackForBone(GeoBone bone, T companion) {
-				if (!companion.holdsSwappedWeapon() || !companion.setting(CompanionEntity.SHOW_WEAPON)) {
+				if (!companion.showsGivenWeapon()) {
 					return null;
 				}
 				// In her hand only while her claymore would be (it fades in and out the same way).
@@ -296,14 +296,14 @@ public class CompanionRenderer<T extends CompanionEntity> extends GeoEntityRende
 			}
 			float frame = Minecraft.getInstance().getDeltaFrameTime();
 			if (companion.handWeaponSpark > 0 || companion.handWeaponIn > 0 && companion.handWeaponIn < 1) {
-				if (companion.holdsSwappedWeapon() && gripBone != null) {
+				if (companion.showsGivenWeapon() && gripBone != null) {
 					sparkleAlong(companion, gripBone, frame, companion.handWeaponWanted);
 				} else {
 					sparkle(companion, handBlade, frame, companion.handWeaponWanted);
 				}
 			}
 			if (companion.backWeaponIn > 0 && companion.backWeaponIn < 1) {
-				if (companion.holdsSwappedWeapon() && backGripBone != null) {
+				if (companion.showsGivenWeapon() && backGripBone != null) {
 					sparkleAlong(companion, backGripBone, frame, companion.backWeaponWanted);
 				} else {
 					sparkle(companion, backBlade, frame, companion.backWeaponWanted);
@@ -523,7 +523,7 @@ public class CompanionRenderer<T extends CompanionEntity> extends GeoEntityRende
 			return;
 		}
 		// A swapped-in weapon replaces her own weapon model, in hand and hovering behind her.
-		if (animatable != null && animatable.holdsSwappedWeapon() && isOwnWeaponModel(bone) && !auraPass) {
+		if (animatable != null && animatable.showsGivenWeapon() && isOwnWeaponModel(bone) && !auraPass) {
 			return;
 		}
 		// The skirt is drawn in its own pass only (culled, with its own texture if it has one).

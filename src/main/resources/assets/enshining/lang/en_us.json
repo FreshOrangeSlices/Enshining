@@ -13,7 +13,7 @@
   "enshining.behavior.wait_for_leader": "Wait for leader",
   "enshining.behavior.passive": "Passive",
   "enshining.menu.armor": "Armor: %s",
-  "enshining.menu.weapon": "Weapon: %s",
+  "enshining.menu.weapon": "Show the given weapon: %s",
   "enshining.menu.skill": "Skill: %s",
   "enshining.menu.burst": "Burst: %s",
   "enshining.menu.on": "On",
