@@ -101,6 +101,8 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 	 * simply back.
 	 */
 	private static final EntityDataAccessor<Boolean> OFF_FIELD = SynchedEntityData.defineId(CompanionEntity.class, EntityDataSerializers.BOOLEAN);
+	/** For the E/Q display while you play as her: her skill cooldown (ticks) << 8 | her energy (capped at 255). */
+	private static final EntityDataAccessor<Integer> ABILITIES = SynchedEntityData.defineId(CompanionEntity.class, EntityDataSerializers.INT);
 	/** Slow, like sneaking, while she spins. */
 	private static final UUID SPIN_SLOW = UUID.fromString("5e3b1c2a-7d41-4c55-9a0e-0e1a1f000008");
 	/** How long (ticks) she lingers on a combo hit's last frame waiting for the next one before the combo resets. */
@@ -180,10 +182,10 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 	protected abstract int burstCost();
 
 	/** The elemental skill, used in a fight when it's off cooldown. */
-	public abstract void useSkill(LivingEntity target);
+	public abstract void useSkill(@Nullable LivingEntity target);
 
 	/** The burst, used in a fight once energy is full enough. */
-	public abstract void useBurst(LivingEntity target);
+	public abstract void useBurst(@Nullable LivingEntity target);
 
 	/** How far her melee reaches compared to normal (Noelle's burst doubles it). */
 	public double meleeReachScale() {
@@ -299,6 +301,7 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 		entityData.define(SETTINGS, DEFAULT_SETTINGS);
 		entityData.define(BEHAVIOR, CompanionBehavior.AGGRESSIVE.ordinal());
 		entityData.define(OFF_FIELD, false);
+		entityData.define(ABILITIES, 0);
 	}
 
 	// ---- Menu settings ----------------------------------------------------------------------------------------
@@ -419,6 +422,12 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 	public boolean pilotRunning;
 	/** Server side, while someone plays as her: whether they're dashing (their client times it). */
 	public boolean pilotDashing;
+	/** Server side, played as: a click that came while a hit was playing, kept this many ticks for when it can follow. */
+	private int queuedAttack;
+	/** Server side, played as: left click still held for the charged attack (let go: she finishes). */
+	private boolean chargeHeld;
+	/** Server side, played as, for a character with no combo (plain punches): ticks until the next punch. */
+	private int punchCooldown;
 	/** Client side, on the client playing as her: sprint held, ticks of dash left, jump held (set each tick by its keys). */
 	public boolean pilotSprinting, pilotJump;
 	public int pilotDashTicks;
@@ -574,15 +583,17 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 	}
 
 	/** The charged attack on this target (after the combo's last hit; the combo starts over after it). */
-	private void startCharged(LivingEntity target) {
+	private void startCharged(@Nullable LivingEntity target) {
 		resetCombo();
 		chargeStage = CHARGE_START;
 		chargeTicks = 0;
 		spinLoops = 0;
 		comboTarget = target;
 		combatTicks = 60;
-		setYRot((float) (Mth.atan2(target.getZ() - getZ(), target.getX() - getX()) * Mth.RAD_TO_DEG) - 90.0F);
-		setYBodyRot(getYRot());
+		if (target != null) {
+			setYRot((float) (Mth.atan2(target.getZ() - getZ(), target.getX() - getX()) * Mth.RAD_TO_DEG) - 90.0F);
+			setYBodyRot(getYRot());
+		}
 		entityData.set(CHARGE, chargeStage);
 	}
 
@@ -603,7 +614,8 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 		switch (chargeStage) {
 			case CHARGE_START -> {
 				if (chargeTicks >= charged.startTicks()) {
-					chargeStage = CHARGE_SPIN;
+					// Played as and already let go (held under a second): straight from the wind-up into the finish.
+					chargeStage = isPlayed() && !chargeHeld ? CHARGE_FINISH : CHARGE_SPIN;
 					chargeTicks = 0;
 				}
 			}
@@ -614,7 +626,8 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 				}
 				if (chargeTicks % charged.spinTicks() == 0) {
 					spinLoops++;
-					if (spinLoops >= 6 || spinLoops >= 2 && comboFoe(0.0) == null) {
+					// Played as: spins while you hold, finishing at the end of a loop (6 at most, until stamina).
+					if (isPlayed() ? !chargeHeld || spinLoops >= 6 : spinLoops >= 6 || spinLoops >= 2 && comboFoe(0.0) == null) {
 						chargeStage = CHARGE_FINISH;
 						chargeTicks = 0;
 					}
@@ -652,7 +665,7 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 				&& !(mob instanceof TamableAnimal tame && tame.isTame())).size() >= 3;
 	}
 
-	private void startPiece(ComboHit hit, int index, int phase, LivingEntity target) {
+	private void startPiece(ComboHit hit, int index, int phase, @Nullable LivingEntity target) {
 		comboHitIndex = index;
 		comboCount = (comboCount + 1) & 0xFFFFF;
 		comboPieceTicks = comboTicks(hit.length());
@@ -671,10 +684,9 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 		comboEndTicks = 0;
 		comboTarget = target;
 		combatTicks = 60;
-		double dx = target.getX() - getX();
-		double dz = target.getZ() - getZ();
 		// Aim at the target, but turn there quickly over the first ticks instead of snapping (a snap reads as a spin).
-		comboAimYaw = (float) (Mth.atan2(dz, dx) * Mth.RAD_TO_DEG) - 90.0F;
+		// Played as (no target): the way you turned her.
+		comboAimYaw = target == null ? getYRot() : (float) (Mth.atan2(target.getZ() - getZ(), target.getX() - getX()) * Mth.RAD_TO_DEG) - 90.0F;
 		comboYaw = yBodyRot;
 		lockFacing();
 		entityData.set(COMBO, comboCount << 3 | phase);
@@ -715,7 +727,8 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 			}
 		}
 		// Locked facing for the whole of a hit: the AI's look/turn this tick is undone before it's sent to players.
-		if (!level().isClientSide && comboPieceTicks > 0) {
+		// Played as, your client owns her facing (it aims each hit itself).
+		if (!level().isClientSide && comboPieceTicks > 0 && !isPlayed()) {
 			comboYaw = Mth.approachDegrees(comboYaw, comboAimYaw, 20.0F);
 			lockFacing();
 		}
@@ -740,6 +753,10 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 			comboElapsed++;
 			while (comboImpactIndex < comboImpacts.length && comboElapsed >= comboImpacts[comboImpactIndex]) {
 				comboImpactIndex++;
+				if (isPlayed()) {
+					playedImpact();
+					continue;
+				}
 				LivingEntity target = comboFoe(0.5); // a little give
 				if (target != null) {
 					var attack = getAttribute(Attributes.ATTACK_DAMAGE);
@@ -758,7 +775,21 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 				}
 			}
 		}
-		if (comboPieceTicks > 0 && --comboPieceTicks == 0) {
+		if (comboPieceTicks > 0 && --comboPieceTicks == 0 && isPlayed()) {
+			// Played as: nothing follows by itself. After the last hit, her ending; else she holds the pose for your
+			// next click (the same window as always).
+			boolean lastHit = comboNext == 0 && comboHitIndex == comboHits().size() - 1;
+			if (lastHit) {
+				combosFinished++;
+			}
+			if (lastHit && comboEndAnimation() != null) {
+				comboEndTicks = comboTicks(comboEndLength());
+				comboCount = (comboCount + 1) & 0xFFFFF;
+				entityData.set(COMBO, comboCount << 3 | COMBO_END_PHASE);
+			} else {
+				comboWindowTicks = COMBO_WINDOW_TICKS;
+			}
+		} else if (comboPieceTicks > 0 && --comboPieceTicks == 0) {
 			LivingEntity next = comboFoe(0.0);
 			boolean lastHit = comboNext == 0 && comboHitIndex == comboHits().size() - 1;
 			if (lastHit) {
@@ -782,8 +813,17 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 				comboWindowTicks = COMBO_WINDOW_TICKS;
 			}
 		}
+		// Played as: a click kept from mid-hit goes as soon as the next hit can.
+		if (isPlayed() && queuedAttack > 0) {
+			if (canStartComboHit()) {
+				queuedAttack = 0;
+				startPlayedHit();
+				return;
+			}
+			queuedAttack--;
+		}
 		// Holding a pose or in the ending: anything hostile stepping into reach picks the combo back up.
-		if ((comboWindowTicks > 0 || comboEndTicks > 0) && canStartComboHit()) {
+		if (!isPlayed() && (comboWindowTicks > 0 || comboEndTicks > 0) && canStartComboHit()) {
 			LivingEntity next = comboFoe(0.0);
 			if (next != null) {
 				setTarget(next);
@@ -797,7 +837,7 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 		if (comboEndTicks > 0 && --comboEndTicks == 0) {
 			resetCombo();
 		}
-		if (comboPieceTicks > 0 && comboCancelTicks <= 0 && comboImpactIndex >= comboImpacts.length && canStartComboHit()) {
+		if (!isPlayed() && comboPieceTicks > 0 && comboCancelTicks <= 0 && comboImpactIndex >= comboImpacts.length && canStartComboHit()) {
 			// Animation cancel onto whoever is in reach (her target first), not only the one she started on.
 			LivingEntity next = comboFoe(0.0);
 			if (next != null && next != comboTarget) {
@@ -838,8 +878,9 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 		for (Mob mob : level().getEntitiesOfClass(Mob.class, getBoundingBox().inflate(reach), mob -> mob != primary && mob.isAlive()
 				&& mob instanceof Enemy && !(mob instanceof TamableAnimal tame && tame.isTame()) && inMeleeReach(mob, 0.5))) {
 			double angle = Mth.atan2(mob.getZ() - getZ(), mob.getX() - getX()) * Mth.RAD_TO_DEG - 90.0;
-			if (Math.abs(Mth.wrapDegrees(angle - yBodyRot)) <= arc / 2 && mob.hurt(damageSources().mobAttack(this), damage)) {
-				mob.knockback(0.3, Mth.sin(yBodyRot * Mth.DEG_TO_RAD), -Mth.cos(yBodyRot * Mth.DEG_TO_RAD));
+			float yaw = attackYaw();
+			if (Math.abs(Mth.wrapDegrees(angle - yaw)) <= arc / 2 && mob.hurt(damageSources().mobAttack(this), damage)) {
+				mob.knockback(0.3, Mth.sin(yaw * Mth.DEG_TO_RAD), -Mth.cos(yaw * Mth.DEG_TO_RAD));
 			}
 		}
 	}
@@ -1041,6 +1082,149 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 		return getFirstPassenger() instanceof Player player ? player : super.getControllingPassenger();
 	}
 
+	/** Someone is playing as her right now. */
+	public boolean isPlayed() {
+		return getControllingPassenger() instanceof Player;
+	}
+
+	/** The way her swings and sweeps go: where she faces (played as: the way your client turned her). */
+	protected float attackYaw() {
+		return isPlayed() ? getYRot() : yBodyRot;
+	}
+
+	/** Client side, for the E/Q display: her skill cooldown in ticks. */
+	public int skillCooldownShown() {
+		return entityData.get(ABILITIES) >>> 8;
+	}
+
+	/** Client side, for the E/Q display: her energy. */
+	public int energyShown() {
+		return entityData.get(ABILITIES) & 0xFF;
+	}
+
+	/** Played as, left click: her next hit (a click mid-hit is kept a moment and follows as soon as it can). */
+	public void playerAttack() {
+		if (!isPlayed() || chargeStage != 0 || actionTicks > 0) {
+			return;
+		}
+		if (comboHits().isEmpty()) {
+			// No combo (the test dummy): a plain punch at whatever's in front.
+			if (punchCooldown <= 0) {
+				punchCooldown = 10;
+				swing(InteractionHand.MAIN_HAND);
+				LivingEntity foe = foeInFront(90.0);
+				if (foe != null) {
+					doHurtTarget(foe);
+				}
+			}
+			return;
+		}
+		if (canStartComboHit()) {
+			queuedAttack = 0;
+			startPlayedHit();
+		} else {
+			queuedAttack = 8;
+		}
+	}
+
+	private void startPlayedHit() {
+		List<ComboHit> hits = comboHits();
+		int index = comboNext;
+		comboNext = (index + 1) % hits.size();
+		startPiece(hits.get(index), index, index + 1, null);
+	}
+
+	/**
+	 * A played hit lands: on the nearest enemy in her swing's arc (her combo bonus counts), and everything else in the
+	 * arc with it. A hit with no arc of its own still catches what's straight ahead (60 degrees).
+	 */
+	private void playedImpact() {
+		double arc = cleaveArc(comboHitIndex);
+		LivingEntity primary = foeInFront(arc > 0 ? arc : 60.0);
+		if (primary == null) {
+			return;
+		}
+		var attack = getAttribute(Attributes.ATTACK_DAMAGE);
+		float bonus = comboBonusDamage(comboHitIndex);
+		if (attack != null && bonus != 0) {
+			attack.addTransientModifier(new AttributeModifier(COMBO_BONUS, "Combo hit", bonus, AttributeModifier.Operation.ADDITION));
+		}
+		try {
+			doHurtTarget(primary);
+			cleave(primary);
+		} finally {
+			if (attack != null) {
+				attack.removeModifier(COMBO_BONUS);
+			}
+		}
+	}
+
+	/** The nearest enemy in her reach inside this arc (degrees) in front of her. */
+	@Nullable
+	private LivingEntity foeInFront(double arc) {
+		float yaw = attackYaw();
+		double reach = meleeReach() * meleeReachScale() + 1.0;
+		return level().getEntitiesOfClass(Mob.class, getBoundingBox().inflate(reach), mob -> mob instanceof Enemy && mob.isAlive()
+						&& !(mob instanceof TamableAnimal tame && tame.isTame()) && inMeleeReach(mob, 0.5)
+						&& Math.abs(Mth.wrapDegrees(Mth.atan2(mob.getZ() - getZ(), mob.getX() - getX()) * Mth.RAD_TO_DEG - 90.0 - yaw)) <= arc / 2)
+				.stream().min(java.util.Comparator.comparingDouble(this::distanceToSqr)).orElse(null);
+	}
+
+	/** Played as, left click held past the tap: the charged attack (it cuts any hit short; the combo restarts). */
+	public void playerChargeBegin() {
+		if (!isPlayed() || chargeStage != 0 || actionTicks > 0 || chargedAttack() == null) {
+			return;
+		}
+		queuedAttack = 0;
+		chargeHeld = true;
+		startCharged(null);
+	}
+
+	/** Played as, left click let go: she finishes (straight after the wind-up, or at the end of the spin she's in). */
+	public void playerChargeEnd() {
+		chargeHeld = false;
+	}
+
+	/** Played as, E: her skill, if it's off cooldown (it cuts a hit short; the combo restarts). */
+	public void playerSkill() {
+		if (!isPlayed() || actionTicks > 0 || chargeStage != 0 || skillCooldown > 0) {
+			return;
+		}
+		queuedAttack = 0;
+		skillCooldown = skillCooldownTicks();
+		energy = Math.min(MAX_ENERGY, energy + 6);
+		playAction(ACTION_SKILL, skillAnimationTicks());
+		useSkill(getTarget());
+	}
+
+	/** Played as, Q: her burst, if she has the energy. */
+	public void playerBurst() {
+		if (!isPlayed() || actionTicks > 0 || chargeStage != 0 || energy < burstCost()) {
+			return;
+		}
+		queuedAttack = 0;
+		energy = 0;
+		playAction(ACTION_BURST, burstAnimationTicks());
+		useBurst(getTarget());
+	}
+
+	/** Played as, a dash or a jump: cuts the hit she's in short (its damage too, if it hadn't landed); the combo restarts. */
+	public void playerCancel() {
+		if (isPlayed() && (comboPieceTicks > 0 || comboWindowTicks > 0 || comboEndTicks > 0)) {
+			queuedAttack = 0;
+			resetCombo();
+		}
+	}
+
+	/** Game tests: where the charged attack is (0 none, 1 wind-up, 2 spin, 3 finish) and which hit comes next. */
+	public int chargeStageForTests() {
+		return chargeStage;
+	}
+
+	public int comboNextForTests() {
+		return comboNext;
+	}
+
 	/** Nothing climbs onto her except you playing as her (started with force, so this doesn't stop that). */
 	@Override
 	protected boolean canAddPassenger(Entity passenger) {
@@ -1053,9 +1237,48 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 		return getEyeHeight() - 1.62 + 0.35;
 	}
 
+	/** Client side, played as: a yaw to turn to over the next few ticks (where a hit, charge or burst is aimed). */
+	public float pilotAimYaw;
+	public int pilotAimTicks;
+	// Client side, played as: the hit playing (seen from the server's COMBO), its step forward and the rest of it.
+	private int pilotHitSeen = -1;
+	private int pilotHitTicks, pilotStepTicks;
+	private float pilotStepSpeed;
+
+	/** The yaw your keys point her: forward/side input turned by the camera's yaw (Genshin's camera-relative move). */
+	public static float inputYaw(float cameraYaw, float forward, float side) {
+		float yaw = cameraYaw * Mth.DEG_TO_RAD;
+		double dx = side * Mth.cos(yaw) - forward * Mth.sin(yaw);
+		double dz = forward * Mth.cos(yaw) + side * Mth.sin(yaw);
+		return (float) (Mth.atan2(dz, dx) * Mth.RAD_TO_DEG) - 90.0F;
+	}
+
+	/** Client side, played as: in a hit (planted, apart from its small step forward). */
+	public boolean pilotInHit() {
+		return pilotHitTicks > 0;
+	}
+
+	/** Client side, played as: a combo is showing but no hit is playing (the pose held for your next click, or her ending). */
+	public boolean pilotHolding() {
+		return pilotHitTicks == 0 && (entityData.get(COMBO) & 7) != 0;
+	}
+
+	/** Client side, played as: you just cut the hit short (dash, jump, skill, charge): free to move at once. */
+	public void pilotCancelLocal() {
+		pilotHitTicks = 0;
+		pilotStepTicks = 0;
+	}
+
+	/** Client side, played as: planted (a hit past its step, her skill, the charged wind-up and finish). */
+	private boolean pilotPlanted() {
+		int charge = entityData.get(CHARGE);
+		return pilotHitTicks > 0 || action() == ACTION_SKILL || charge == CHARGE_START || charge == CHARGE_FINISH;
+	}
+
 	/**
 	 * On the client playing as her: Genshin's movement. Your keys point relative to the camera; she turns to face that
-	 * way and runs where she faces (so S turns her round toward you, rather than walking her backwards).
+	 * way and runs where she faces (so S turns her round toward you, rather than walking her backwards). A hit plants
+	 * her (after its small step forward), turned where it was aimed.
 	 */
 	@Override
 	protected void tickRidden(Player player, Vec3 travelVector) {
@@ -1063,14 +1286,34 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 		if (!level().isClientSide) {
 			return;
 		}
+		int packed = entityData.get(COMBO);
+		int phase = packed & 7;
+		int count = packed >>> 3;
+		if (count != pilotHitSeen) {
+			pilotHitSeen = count;
+			if (phase >= 1 && phase <= comboHits().size()) {
+				ComboHit hit = comboHits().get(phase - 1);
+				pilotHitTicks = comboTicks(hit.length());
+				pilotStepTicks = Math.max(1, (int) Math.ceil(hit.motionEnd() / comboSpeed() * 20));
+				pilotStepSpeed = (float) (comboTravel() / pilotStepTicks / GROUND);
+			} else {
+				pilotCancelLocal();
+			}
+		} else {
+			if (pilotHitTicks > 0) {
+				pilotHitTicks--;
+			}
+			if (pilotStepTicks > 0) {
+				pilotStepTicks--;
+			}
+		}
 		float forward = player.zza;
 		float side = player.xxa;
-		if (forward * forward + side * side > 1.0E-4F) {
-			float yaw = player.getYRot() * Mth.DEG_TO_RAD;
-			double dx = side * Mth.cos(yaw) - forward * Mth.sin(yaw);
-			double dz = forward * Mth.cos(yaw) + side * Mth.sin(yaw);
-			float want = (float) (Mth.atan2(dz, dx) * Mth.RAD_TO_DEG) - 90.0F;
-			setYRot(Mth.approachDegrees(getYRot(), want, PLAY_TURN));
+		if (pilotAimTicks > 0) {
+			pilotAimTicks--;
+			setYRot(Mth.approachDegrees(getYRot(), pilotAimYaw, 35.0F));
+		} else if (!pilotPlanted() && forward * forward + side * side > 1.0E-4F) {
+			setYRot(Mth.approachDegrees(getYRot(), inputYaw(player.getYRot(), forward, side), PLAY_TURN));
 		}
 		setXRot(0.0F);
 		setYBodyRot(getYRot());
@@ -1080,21 +1323,27 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 
 	@Override
 	protected Vec3 getRiddenInput(Player player, Vec3 travelVector) {
+		if (pilotHitTicks > 0) {
+			return pilotStepTicks > 0 ? new Vec3(0.0, 0.0, 1.0) : Vec3.ZERO;   // a hit's step goes straight ahead
+		}
 		float amount = Math.min(1.0F, Mth.sqrt(player.xxa * player.xxa + player.zza * player.zza));
 		return new Vec3(0.0, 0.0, amount);
 	}
 
 	@Override
 	protected float getRiddenSpeed(Player player) {
-		if (action() == ACTION_SKILL) {
+		if (pilotHitTicks > 0) {
+			return pilotStepTicks > 0 ? pilotStepSpeed : 0.0F;
+		}
+		if (pilotPlanted()) {
 			return 0.0F;
+		}
+		if (entityData.get(CHARGE) == CHARGE_SPIN) {
+			return PLAY_WALK * 0.3F;   // sneaking pace while she spins
 		}
 		float speed = pilotSprinting ? (pilotDashTicks > 0 ? PLAY_DASH : PLAY_JOG) : PLAY_WALK;
 		if (action() == ACTION_BURST) {
 			speed *= 0.5F;
-		}
-		if (entityData.get(CHARGE) == CHARGE_SPIN) {
-			speed *= 0.3F;
 		}
 		return speed;
 	}
@@ -1377,6 +1626,13 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 			}
 		}
 
+		entityData.set(ABILITIES, Math.min(skillCooldown, 0xFFFFFF) << 8 | Math.min(energy, 255));
+		if (punchCooldown > 0) {
+			punchCooldown--;
+		}
+		if (isPlayed()) {
+			return;   // your keys cast her skill and burst
+		}
 		LivingEntity target = getTarget();
 		// One at a time: a skill or burst always plays to its end (nothing cuts in, not even the other one).
 		if (target == null || !target.isAlive() || distanceToSqr(target) > 36 || comboPieceTicks > 0 || actionTicks > 0 || chargeStage != 0) {

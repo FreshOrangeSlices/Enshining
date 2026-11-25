@@ -41,5 +41,9 @@
   "key.enshining.party_1": "Party member 1",
   "key.enshining.party_2": "Party member 2",
   "key.enshining.party_3": "Party member 3",
-  "key.enshining.party_4": "Party member 4"
+  "key.enshining.party_4": "Party member 4",
+  "key.enshining.attack": "Attack (hold: charged attack)",
+  "key.enshining.skill": "Elemental skill",
+  "key.enshining.burst": "Elemental burst",
+  "key.enshining.interact": "Interact (doors, levers, chests)"
 }

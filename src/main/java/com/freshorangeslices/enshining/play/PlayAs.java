@@ -168,6 +168,38 @@ public final class PlayAs {
 		sendState(session);
 	}
 
+	/** One of her moves from your keys (left click, hold and let go, E, Q, a cancel, F). */
+	public static void move(ServerPlayer player, byte action) {
+		Session session = SESSIONS.get(player.getUUID());
+		CompanionEntity active = session == null || session.fallenTicks > 0 ? null : active(session);
+		if (active == null || player.getVehicle() != active) {
+			return;
+		}
+		switch (action) {
+			case PlayNetwork.Action.ATTACK -> active.playerAttack();
+			case PlayNetwork.Action.CHARGE_BEGIN -> active.playerChargeBegin();
+			case PlayNetwork.Action.CHARGE_END -> active.playerChargeEnd();
+			case PlayNetwork.Action.SKILL -> active.playerSkill();
+			case PlayNetwork.Action.BURST -> active.playerBurst();
+			case PlayNetwork.Action.CANCEL -> active.playerCancel();
+			case PlayNetwork.Action.INTERACT -> interact(player, active);
+			default -> {
+			}
+		}
+	}
+
+	/** F: the door, lever, button or chest you're looking at, from her eyes, within 4.5 blocks. */
+	private static void interact(ServerPlayer player, CompanionEntity companion) {
+		Vec3 from = companion.getEyePosition();
+		Vec3 to = from.add(player.getLookAngle().scale(4.5));
+		var hit = player.level().clip(new net.minecraft.world.level.ClipContext(from, to, net.minecraft.world.level.ClipContext.Block.OUTLINE,
+				net.minecraft.world.level.ClipContext.Fluid.NONE, companion));
+		if (hit.getType() == net.minecraft.world.phys.HitResult.Type.BLOCK) {
+			var state = player.level().getBlockState(hit.getBlockPos());
+			state.use(player.level(), player, net.minecraft.world.InteractionHand.MAIN_HAND, hit);
+		}
+	}
+
 	/** The held keys that change how she moves (sprint, whether you're moving at all, and the dash). */
 	public static void input(ServerPlayer player, boolean sprint, boolean moving, boolean dash) {
 		Session session = SESSIONS.get(player.getUUID());

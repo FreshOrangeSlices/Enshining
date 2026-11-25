@@ -226,7 +226,7 @@ public class NoelleEntity extends CompanionEntity {
 				e -> e != this && e instanceof Enemy && e.isAlive() && !(e instanceof TamableAnimal pet && pet.isTame())
 						&& !swingHit.contains(e.getUUID()))) {
 			double distance = Math.sqrt(near.distanceToSqr(getX(), near.getY(), getZ()));
-			double angle = Mth.wrapDegrees(Mth.atan2(near.getZ() - getZ(), near.getX() - getX()) * Mth.RAD_TO_DEG - 90.0 - yBodyRot);
+			double angle = Mth.wrapDegrees(Mth.atan2(near.getZ() - getZ(), near.getX() - getX()) * Mth.RAD_TO_DEG - 90.0 - attackYaw());
 			if (distance <= BURST_SWING_REACH + near.getBbWidth() / 2.0 && angle <= 90.0 && angle >= downTo) {
 				swingHit.add(near.getUUID());
 				near.hurt(damageSources().mobAttack(this), damage);
@@ -238,7 +238,7 @@ public class NoelleEntity extends CompanionEntity {
 		if (server != null) {
 			// This step's slice of the gold crescent, out to the swing's reach.
 			Vec3 from = position().add(0, 1.0, 0);
-			float sliceYaw = (float) (yBodyRot + downTo + 90.0 / SWING_STEPS);
+			float sliceYaw = (float) (attackYaw() + downTo + 90.0 / SWING_STEPS);
 			Fx.arc(server, element().dust(), from, sliceYaw, BURST_SWING_REACH * 0.85, 180.0 / SWING_STEPS, 5, 0.3);
 			Fx.arc(server, element().dust(), from, sliceYaw, BURST_SWING_REACH * 0.55, 180.0 / SWING_STEPS, 3, 0.2);
 			Fx.arc(server, ParticleTypes.WAX_OFF, from, sliceYaw, BURST_SWING_REACH * 0.7, 180.0 / SWING_STEPS, 2, 0.3);
@@ -332,7 +332,7 @@ public class NoelleEntity extends CompanionEntity {
 			if (!burstActive()) {
 				// A small, faint gold arc for a normal swing, as wide as the swing hits (Sweeping Time draws a bigger one).
 				double arc = cleaveArc(comboHitIndex());
-				Fx.arc(server, element().dust(), position().add(0, 1.0, 0), yBodyRot, 2.3, arc, (int) Math.max(6, arc * 0.12), 0.4);
+				Fx.arc(server, element().dust(), position().add(0, 1.0, 0), attackYaw(), 2.3, arc, (int) Math.max(6, arc * 0.12), 0.4);
 			}
 		}
 

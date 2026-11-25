@@ -59,6 +59,11 @@ public final class PlayAsClient {
 
 	public static final KeyMapping HOP_OUT = key("hop_out", GLFW.GLFW_KEY_J);
 	public static final KeyMapping SPRINT = key("sprint", GLFW.GLFW_KEY_LEFT_SHIFT);
+	public static final KeyMapping ATTACK = new KeyMapping("key.enshining.attack", WHILE_PLAYING, InputConstants.Type.MOUSE,
+			GLFW.GLFW_MOUSE_BUTTON_LEFT, CATEGORY);
+	public static final KeyMapping SKILL = key("skill", GLFW.GLFW_KEY_E);
+	public static final KeyMapping BURST = key("burst", GLFW.GLFW_KEY_Q);
+	public static final KeyMapping INTERACT = key("interact", GLFW.GLFW_KEY_F);
 	public static final KeyMapping[] PARTY = {key("party_1", GLFW.GLFW_KEY_1), key("party_2", GLFW.GLFW_KEY_2),
 			key("party_3", GLFW.GLFW_KEY_3), key("party_4", GLFW.GLFW_KEY_4)};
 
@@ -76,6 +81,12 @@ public final class PlayAsClient {
 	private static int dashTicks;
 	private static boolean sprintWas;
 	private static int lastDash = -1000;
+	/** Left click: held this many ticks becomes the charged attack (a shorter press is a normal hit). */
+	private static final int CHARGE_HOLD = 6;
+	private static int attackHeld;
+	private static boolean charging;
+	private static boolean jumpWas;
+	private static int holdingCancelSent = -1000;
 	private static final Map<KeyMapping, Boolean> HELD = new HashMap<>();
 
 	private PlayAsClient() {
@@ -86,7 +97,7 @@ public final class PlayAsClient {
 	}
 
 	static List<KeyMapping> keys() {
-		List<KeyMapping> all = new ArrayList<>(List.of(HOP_OUT, SPRINT));
+		List<KeyMapping> all = new ArrayList<>(List.of(HOP_OUT, SPRINT, ATTACK, SKILL, BURST, INTERACT));
 		all.addAll(Arrays.asList(PARTY));
 		return all;
 	}
@@ -189,11 +200,13 @@ public final class PlayAsClient {
 		if (player.getVehicle() instanceof CompanionEntity companion) {
 			boolean moving = Math.abs(player.zza) > 1.0E-3F || Math.abs(player.xxa) > 1.0E-3F;
 			boolean sprint = !screenOpen && down(SPRINT) && moving;
+			fight(mc, player, companion, screenOpen, moving);
 			if (sprint && !sprintWas) {
-				// Genshin's dash, once a second at most (stamina will limit it later).
+				// Genshin's dash, once a second at most (stamina will limit it later). It cuts a hit short.
 				if (player.tickCount - lastDash >= DASH_COOLDOWN || player.tickCount < lastDash) {
 					dashTicks = DASH_TICKS;
 					lastDash = player.tickCount;
+					cancel(companion);
 				}
 			} else if (!sprint) {
 				dashTicks = 0;
@@ -211,6 +224,93 @@ public final class PlayAsClient {
 				PlayNetwork.toServer(new PlayNetwork.Input(flags));
 			}
 		}
+	}
+
+	/**
+	 * Her moves from your keys. Left click: a tap is her next hit, held past {@link #CHARGE_HOLD} ticks it's the charged
+	 * attack (let go to finish). E skill, Q burst, F the door or chest you look at. A jump cuts a hit short, and so does
+	 * walking off while she holds a pose or plays her ending.
+	 */
+	private static void fight(Minecraft mc, LocalPlayer player, CompanionEntity companion, boolean screenOpen, boolean moving) {
+		boolean attack = !screenOpen && down(ATTACK);
+		if (attack) {
+			attackHeld++;
+			if (!charging && attackHeld == CHARGE_HOLD) {
+				charging = true;
+				aim(player, companion);
+				companion.pilotCancelLocal();
+				PlayNetwork.toServer(new PlayNetwork.Action(PlayNetwork.Action.CHARGE_BEGIN));
+			}
+		} else if (attackHeld > 0) {
+			if (charging) {
+				PlayNetwork.toServer(new PlayNetwork.Action(PlayNetwork.Action.CHARGE_END));
+			} else {
+				aim(player, companion);
+				PlayNetwork.toServer(new PlayNetwork.Action(PlayNetwork.Action.ATTACK));
+			}
+			attackHeld = 0;
+			charging = false;
+		}
+		if (pressed(SKILL, screenOpen)) {
+			companion.pilotCancelLocal();
+			PlayNetwork.toServer(new PlayNetwork.Action(PlayNetwork.Action.SKILL));
+		}
+		if (pressed(BURST, screenOpen)) {
+			aim(player, companion);
+			companion.pilotCancelLocal();
+			PlayNetwork.toServer(new PlayNetwork.Action(PlayNetwork.Action.BURST));
+		}
+		if (pressed(INTERACT, screenOpen)) {
+			PlayNetwork.toServer(new PlayNetwork.Action(PlayNetwork.Action.INTERACT));
+		}
+		boolean jump = !screenOpen && player.input.jumping;
+		if (jump && !jumpWas) {
+			cancel(companion);
+		}
+		jumpWas = jump;
+		// Walking off while she holds a hit's pose or plays her ending: that's over (asked again at most every 5 ticks,
+		// while the server's answer is on its way).
+		if (moving && companion.pilotHolding() && (player.tickCount - holdingCancelSent >= 5 || player.tickCount < holdingCancelSent)) {
+			holdingCancelSent = player.tickCount;
+			cancel(companion);
+		}
+	}
+
+	/** Cut her hit (or held pose, or ending) short: the combo starts over at hit 1. */
+	private static void cancel(CompanionEntity companion) {
+		if (companion.pilotInHit() || companion.pilotHolding()) {
+			companion.pilotCancelLocal();
+			PlayNetwork.toServer(new PlayNetwork.Action(PlayNetwork.Action.CANCEL));
+		}
+	}
+
+	/**
+	 * Where a hit, charge or burst goes, Genshin-style: at the nearest enemy within 5 blocks in front of the camera
+	 * (60 degrees either side), else the way your keys point, else the way she already faces.
+	 */
+	private static void aim(LocalPlayer player, CompanionEntity companion) {
+		float camera = player.getYRot();
+		Entity best = null;
+		double bestDistance = Double.MAX_VALUE;
+		for (Entity e : companion.level().getEntities(companion, companion.getBoundingBox().inflate(5.0),
+				e -> e instanceof net.minecraft.world.entity.monster.Enemy && e.isAlive())) {
+			double yaw = Mth.atan2(e.getZ() - companion.getZ(), e.getX() - companion.getX()) * Mth.RAD_TO_DEG - 90.0;
+			double distance = companion.distanceToSqr(e);
+			if (Math.abs(Mth.wrapDegrees(yaw - camera)) <= 60.0 && distance < bestDistance && distance <= 25.0) {
+				best = e;
+				bestDistance = distance;
+			}
+		}
+		float want;
+		if (best != null) {
+			want = (float) (Mth.atan2(best.getZ() - companion.getZ(), best.getX() - companion.getX()) * Mth.RAD_TO_DEG) - 90.0F;
+		} else if (Math.abs(player.zza) > 1.0E-3F || Math.abs(player.xxa) > 1.0E-3F) {
+			want = CompanionEntity.inputYaw(camera, player.zza, player.xxa);
+		} else {
+			return;
+		}
+		companion.pilotAimYaw = want;
+		companion.pilotAimTicks = 4;
 	}
 
 	/** Never sneak (that would hop you out the vanilla way); while she's fallen, Steve stays put. */
@@ -298,6 +398,40 @@ public final class PlayAsClient {
 				|| overlay == VanillaGuiOverlay.CROSSHAIR.type() || overlay == VanillaGuiOverlay.ITEM_NAME.type()
 				|| overlay == VanillaGuiOverlay.JUMP_BAR.type()) {
 			event.setCanceled(true);
+		}
+	}
+
+	/** Everything on screen while you're her: the party down the right, her E and Q in the corner. */
+	static void renderHud(GuiGraphics g, int screenWidth, int screenHeight) {
+		renderParty(g, screenWidth, screenHeight);
+		renderAbilities(g, screenWidth, screenHeight);
+	}
+
+	/** Her skill (E: seconds of cooldown left, or ready) and burst (Q: fills with energy, gold when ready). */
+	static void renderAbilities(GuiGraphics g, int screenWidth, int screenHeight) {
+		Minecraft mc = Minecraft.getInstance();
+		if (mc.player == null || !(mc.player.getVehicle() instanceof CompanionEntity companion) || mc.options.hideGui) {
+			return;
+		}
+		int size = 22;
+		int y = screenHeight - size - 10;
+		int qx = screenWidth - size - 10;
+		int ex = qx - size - 6;
+		int cooldown = companion.skillCooldownShown();
+		g.fill(ex, y, ex + size, y + size, 0xA0000000);
+		g.renderOutline(ex, y, size, size, cooldown > 0 ? 0xFF555555 : 0xFFF2D27A);
+		String eText = cooldown > 0 ? String.valueOf((cooldown + 19) / 20) : "E";
+		g.drawCenteredString(mc.font, eText, ex + size / 2, y + 7, cooldown > 0 ? 0xFFAAAAAA : 0xFFF2D27A);
+		int cost = Math.max(1, companion.burstEnergyCost());
+		float fill = Math.min(1.0F, companion.energyShown() / (float) cost);
+		boolean ready = fill >= 1.0F;
+		g.fill(qx, y, qx + size, y + size, 0xA0000000);
+		int fillTop = y + size - Math.round(size * fill);
+		g.fill(qx + 1, fillTop, qx + size - 1, y + size - 1, ready ? 0xC0D6AA40 : 0x806A5A30);
+		g.renderOutline(qx, y, size, size, ready ? 0xFFF2D27A : 0xFF555555);
+		g.drawCenteredString(mc.font, "Q", qx + size / 2, y + 7, ready ? 0xFFFFFFFF : 0xFFAAAAAA);
+		if (cooldown > 0) {
+			g.drawString(mc.font, "E", ex + 2, y + size - 9, 0x80FFFFFF);
 		}
 	}
 

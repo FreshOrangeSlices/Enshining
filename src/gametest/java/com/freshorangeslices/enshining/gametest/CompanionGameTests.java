@@ -99,6 +99,84 @@ public final class CompanionGameTests {
 		helper.succeed();
 	}
 
+	/** Playing as her with her AI running (as in game: it stands down while you drive her), facing south (+z). */
+	private static NoelleEntity playedNoelle(GameTestHelper helper, ServerPlayer player) {
+		NoelleEntity noelle = noelle(helper);
+		noelle.setNoAi(false);
+		noelle.befriend(player);
+		PlayAs.start(player, noelle);
+		noelle.setYRot(0.0F);
+		noelle.setYBodyRot(0.0F);
+		return noelle;
+	}
+
+	@GameTest(template = "empty", timeoutTicks = 60)
+	public static void leftClickSwingsHerCombo(GameTestHelper helper) {
+		ServerPlayer player = player(helper);
+		NoelleEntity noelle = playedNoelle(helper, player);
+		var husk = helper.spawn(EntityType.HUSK, new BlockPos(2, 2, 4));
+		husk.setNoAi(true);
+		float full = husk.getHealth();
+		noelle.playerAttack();
+		helper.assertTrue(noelle.comboNextForTests() == 1, "The click starts hit 1");
+		helper.runAfterDelay(30, () -> {
+			helper.assertTrue(husk.getHealth() < full, "Hit 1 lands on what's in front of her: " + husk.getHealth());
+			helper.succeed();
+		});
+	}
+
+	@GameTest(template = "empty", timeoutTicks = 60)
+	public static void aShortHoldGoesStraightToTheFinish(GameTestHelper helper) {
+		ServerPlayer player = player(helper);
+		NoelleEntity noelle = playedNoelle(helper, player);
+		noelle.playerChargeBegin();
+		noelle.playerChargeEnd();
+		helper.assertTrue(noelle.chargeStageForTests() == 1, "Wind-up");
+		helper.runAfterDelay(23, () -> {
+			helper.assertTrue(noelle.chargeStageForTests() == 3, "Let go in the wind-up: no spin, the finish: " + noelle.chargeStageForTests());
+			helper.succeed();
+		});
+	}
+
+	@GameTest(template = "empty", timeoutTicks = 100)
+	public static void aLongHoldSpinsUntilYouLetGo(GameTestHelper helper) {
+		ServerPlayer player = player(helper);
+		NoelleEntity noelle = playedNoelle(helper, player);
+		noelle.playerChargeBegin();
+		helper.runAfterDelay(40, () -> {
+			helper.assertTrue(noelle.chargeStageForTests() == 2, "Still held: spinning: " + noelle.chargeStageForTests());
+			noelle.playerChargeEnd();
+		});
+		helper.runAfterDelay(62, () -> {
+			helper.assertTrue(noelle.chargeStageForTests() == 3, "Let go: the finish at the end of the spin: " + noelle.chargeStageForTests());
+			helper.succeed();
+		});
+	}
+
+	@GameTest(template = "empty")
+	public static void eCastsHerSkillAndQNeedsEnergy(GameTestHelper helper) {
+		ServerPlayer player = player(helper);
+		NoelleEntity noelle = playedNoelle(helper, player);
+		noelle.playerBurst();
+		helper.assertTrue(noelle.action() == CompanionEntity.ACTION_NONE, "Q with no energy: nothing");
+		noelle.playerSkill();
+		helper.assertTrue(noelle.action() == CompanionEntity.ACTION_SKILL, "E: her skill");
+		int cooldown = noelle.skillCooldown();
+		helper.assertTrue(cooldown > 0, "Then it's on cooldown");
+		helper.succeed();
+	}
+
+	@GameTest(template = "empty")
+	public static void aDashOrJumpRestartsTheCombo(GameTestHelper helper) {
+		ServerPlayer player = player(helper);
+		NoelleEntity noelle = playedNoelle(helper, player);
+		noelle.playerAttack();
+		helper.assertTrue(noelle.comboNextForTests() == 1, "Hit 1 playing");
+		noelle.playerCancel();
+		helper.assertTrue(noelle.comboNextForTests() == 0, "Cut short: the next click is hit 1 again");
+		helper.succeed();
+	}
+
 	@GameTest(template = "empty", timeoutTicks = 100)
 	public static void whenSheFallsStevePopsOutTwoSecondsLater(GameTestHelper helper) {
 		NoelleEntity noelle = noelle(helper);

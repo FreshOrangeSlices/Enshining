@@ -66,9 +66,14 @@ public final class PlayNetwork {
 		}
 	}
 
-	/** A key press: hop out, or switch to party slot {@code slot}. */
+	/** A key press: hop out, switch to party slot {@code slot}, or one of her moves. */
 	public record Action(byte action, byte slot) {
-		public static final byte HOP_OUT = 0, SWITCH = 1;
+		public static final byte HOP_OUT = 0, SWITCH = 1, ATTACK = 2, CHARGE_BEGIN = 3, CHARGE_END = 4, SKILL = 5, BURST = 6,
+				CANCEL = 7, INTERACT = 8;
+
+		public Action(byte action) {
+			this(action, (byte) 0);
+		}
 
 		void write(FriendlyByteBuf buf) {
 			buf.writeByte(action);
@@ -87,8 +92,7 @@ public final class PlayNetwork {
 			switch (action) {
 				case HOP_OUT -> PlayAs.hopOut(player);
 				case SWITCH -> PlayAs.switchTo(player, slot);
-				default -> {
-				}
+				default -> PlayAs.move(player, action);
 			}
 		}
 	}

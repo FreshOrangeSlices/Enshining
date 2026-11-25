@@ -31,7 +31,7 @@ public final class ClientSetup {
 
 	@SubscribeEvent
 	public static void overlays(net.minecraftforge.client.event.RegisterGuiOverlaysEvent event) {
-		event.registerAboveAll("party", (gui, graphics, partialTick, width, height) -> PlayAsClient.renderParty(graphics, width, height));
+		event.registerAboveAll("party", (gui, graphics, partialTick, width, height) -> PlayAsClient.renderHud(graphics, width, height));
 	}
 
 	@SubscribeEvent
