@@ -417,6 +417,8 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 	public float weaponLastTime = -1.0F;
 	/** Server side, while someone plays as her: whether their keys have her running (sprint held and moving). */
 	public boolean pilotRunning;
+	/** Server side, while someone plays as her: whether they're dashing (their client times it). */
+	public boolean pilotDashing;
 	/** Client side, on the client playing as her: sprint held, ticks of dash left, jump held (set each tick by its keys). */
 	public boolean pilotSprinting, pilotJump;
 	public int pilotDashTicks;
@@ -981,8 +983,18 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 
 	// ---- Being played as (see play.PlayAs) -------------------------------------------------------------------------
 
-	/** Speeds while played as (blocks per tick, before ground friction): a player's walk, a jog, the dash. */
-	private static final float PLAY_WALK = 0.09F, PLAY_JOG = 0.13F, PLAY_DASH = 0.18F;
+	/**
+	 * Speeds while played as (before ground friction; on normal ground she covers {@link #GROUND} times this a tick):
+	 * a walk just under a player's, a jog faster than a player's sprint, and the dash (Left Shift), a burst.
+	 */
+	private static final float PLAY_WALK = 0.09F, PLAY_JOG = 0.16F, PLAY_DASH = 0.24F;
+	/** Ground covered per tick for each unit of speed, at full input, on normal blocks (1 / (1 - 0.6 * 0.91)). */
+	private static final float GROUND = 2.2026F;
+	/**
+	 * The ground her jog and run animations were made for: her own jog and dash when she runs by herself (blocks a
+	 * tick). Driven faster, they play faster to match, so her feet and arms keep pace with the ground.
+	 */
+	private static final float OWN_JOG_PACE = 0.167F, OWN_DASH_PACE = 0.303F;
 	/** How fast she turns to face where your keys send her (degrees per tick). */
 	private static final float PLAY_TURN = 45.0F;
 
@@ -1258,6 +1270,11 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 		if (isOffField()) {
 			return false;
 		}
+		// Dashing while you play as her: i-frames, like Genshin's dodge (not against the void or /kill).
+		if (getControllingPassenger() instanceof Player && entityData.get(DASHING)
+				&& !source.is(net.minecraft.tags.DamageTypeTags.BYPASSES_INVULNERABILITY)) {
+			return false;
+		}
 		Entity attacker = source.getEntity();
 		if (attacker != null && isTame() && attacker.getUUID().equals(getOwnerUUID())) {
 			return false; // the owner's stray swings never land
@@ -1337,16 +1354,20 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 		boolean piloted = getControllingPassenger() instanceof Player;
 		boolean running = piloted ? pilotRunning && !comboActive
 				: !comboActive && getNavigation().isInProgress() && getMoveControl().getSpeedModifier() >= 1.05;
-		// Played as: every sprint starts with the dash (Genshin's), however recently she last ran.
-		if (running && !isSprinting() && (piloted || calmTicks >= DASH_AFTER_CALM)) {
-			dashTicks = DASH_TICKS;
+		if (piloted) {
+			// Your Left Shift times the dash (at most one a second, until there's stamina); the dash gives her i-frames.
+			dashTicks = running && pilotDashing ? 1 : 0;
+		} else {
+			if (running && !isSprinting() && calmTicks >= DASH_AFTER_CALM) {
+				dashTicks = DASH_TICKS;
+			}
+			if (!running) {
+				dashTicks = 0;
+			} else if (dashTicks > 0) {
+				dashTicks--;
+			}
 		}
 		calmTicks = running ? 0 : calmTicks + 1;
-		if (!running) {
-			dashTicks = 0;
-		} else if (dashTicks > 0) {
-			dashTicks--;
-		}
 		setSprinting(running);
 		entityData.set(DASHING, dashTicks > 0);
 		if (speed != null && (dashTicks > 0) != (speed.getModifier(DASH_SPEED) != null)) {
@@ -1574,7 +1595,13 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 			if (state.isMoving()) {
 				calmPose = !isSprinting();
 				if (isSprinting()) {
-					return state.setAndContinue(entityData.get(DASHING) || !hasAnimation("animation.companion.jog") ? RUN : JOG);
+					boolean dash = entityData.get(DASHING) || !hasAnimation("animation.companion.jog");
+					if (getControllingPassenger() instanceof Player) {
+						// Driven faster than she runs by herself: the cycle speeds up to match (steady while she
+						// keeps running, so GeckoLib's clock doesn't jump).
+						state.getController().setAnimationSpeed(dash ? PLAY_DASH * GROUND / OWN_DASH_PACE : PLAY_JOG * GROUND / OWN_JOG_PACE);
+					}
+					return state.setAndContinue(dash ? RUN : JOG);
 				}
 				return state.setAndContinue(WALK);
 			}

@@ -62,8 +62,8 @@ public final class PlayAsClient {
 	public static final KeyMapping[] PARTY = {key("party_1", GLFW.GLFW_KEY_1), key("party_2", GLFW.GLFW_KEY_2),
 			key("party_3", GLFW.GLFW_KEY_3), key("party_4", GLFW.GLFW_KEY_4)};
 
-	/** Ticks of dash at the start of each sprint (the server keeps the same count for the animation). */
-	private static final int DASH_TICKS = 10;
+	/** Ticks of dash at the start of each sprint (she has i-frames for them), and the least time between two dashes. */
+	private static final int DASH_TICKS = 10, DASH_COOLDOWN = 20;
 	private static final float ZOOM_MIN = 3.0F, ZOOM_MAX = 10.0F;
 
 	private static int[] party = new int[0];
@@ -75,6 +75,7 @@ public final class PlayAsClient {
 	private static byte lastFlags = -1;
 	private static int dashTicks;
 	private static boolean sprintWas;
+	private static int lastDash = -1000;
 	private static final Map<KeyMapping, Boolean> HELD = new HashMap<>();
 
 	private PlayAsClient() {
@@ -189,7 +190,11 @@ public final class PlayAsClient {
 			boolean moving = Math.abs(player.zza) > 1.0E-3F || Math.abs(player.xxa) > 1.0E-3F;
 			boolean sprint = !screenOpen && down(SPRINT) && moving;
 			if (sprint && !sprintWas) {
-				dashTicks = DASH_TICKS;
+				// Genshin's dash, once a second at most (stamina will limit it later).
+				if (player.tickCount - lastDash >= DASH_COOLDOWN || player.tickCount < lastDash) {
+					dashTicks = DASH_TICKS;
+					lastDash = player.tickCount;
+				}
 			} else if (!sprint) {
 				dashTicks = 0;
 			} else if (dashTicks > 0) {
@@ -199,7 +204,8 @@ public final class PlayAsClient {
 			companion.pilotSprinting = sprint;
 			companion.pilotDashTicks = dashTicks;
 			companion.pilotJump = !screenOpen && player.input.jumping;
-			byte flags = (byte) ((sprint ? PlayNetwork.Input.SPRINT : 0) | (moving ? PlayNetwork.Input.MOVING : 0));
+			byte flags = (byte) ((sprint ? PlayNetwork.Input.SPRINT : 0) | (moving ? PlayNetwork.Input.MOVING : 0)
+					| (dashTicks > 0 ? PlayNetwork.Input.DASH : 0));
 			if (flags != lastFlags) {
 				lastFlags = flags;
 				PlayNetwork.toServer(new PlayNetwork.Input(flags));

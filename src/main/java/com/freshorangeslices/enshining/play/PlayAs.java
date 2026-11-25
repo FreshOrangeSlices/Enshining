@@ -43,7 +43,7 @@ public final class PlayAs {
 		int active;
 		int fallenTicks;
 		int cooldown;
-		boolean sprint, moving;
+		boolean sprint, moving, dash;
 
 		Session(ServerPlayer player) {
 			this.player = player;
@@ -168,12 +168,13 @@ public final class PlayAs {
 		sendState(session);
 	}
 
-	/** The held keys that change how she moves (sprint, and whether you're moving at all). */
-	public static void input(ServerPlayer player, boolean sprint, boolean moving) {
+	/** The held keys that change how she moves (sprint, whether you're moving at all, and the dash). */
+	public static void input(ServerPlayer player, boolean sprint, boolean moving, boolean dash) {
 		Session session = SESSIONS.get(player.getUUID());
 		if (session != null) {
 			session.sprint = sprint;
 			session.moving = moving;
+			session.dash = dash;
 		}
 	}
 
@@ -184,6 +185,7 @@ public final class PlayAs {
 		companion.setTarget(null);
 		companion.setOffField(false);
 		companion.pilotRunning = false;
+		companion.pilotDashing = false;
 		player.startRiding(companion, true);
 		companion.refreshControl();
 		sparkle(companion);
@@ -272,6 +274,7 @@ public final class PlayAs {
 				continue;
 			}
 			active.pilotRunning = session.sprint && session.moving;
+			active.pilotDashing = active.pilotRunning && session.dash;
 			for (UUID id : session.party) {
 				CompanionEntity member = member(player, id);
 				if (member != null && member != active && member.isOffField()) {

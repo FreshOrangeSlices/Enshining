@@ -142,6 +142,19 @@ Nothing here is built yet unless marked done. Order is roughly the order we'll d
   m_90566_), zoom 3-10; Steve, hotbar, hearts, food, XP, crosshair hidden; party list on the right.
 - Next: step 2 = her attacks, charged hold, skill and burst on keys, canceling, F; step 3 = mining.
 
+### Update 2026-11-25 (the user's test of step 1, and of the Nov 24 fixes)
+- Tested good: combat (claymore in every move, with or without a given weapon), menu hand height, charged attack,
+  burst direction, skill range, run cycle, given weapon hovering behind her, walking as her.
+- Fixed Nov 24: weapon toggle = the given weapon's look (off: her claymore, given damage kept); jump 1.5 blocks
+  (jump power 0.465); menu pose starts (the switch to the loop came mid-blend; now blend 4 + start at half speed).
+- Driving her: jog 0.16 and dash 0.24 (were 0.13 / 0.18; walk 0.09 is fine). Driven faster than she runs by herself,
+  the jog and run animations play faster to match the ground (speed x GROUND / her own pace: jog ~2.1x, dash ~1.7x),
+  set once per state so GeckoLib's clock doesn't jump. The dash (Left Shift) is timed by the client, at most once a
+  second until stamina, and gives i-frames (not against the void or /kill).
+- Sitting: the in-game tea set had 38 see-through faces (the Nov 19 texture had the cup corners and plate unpainted);
+  the user's Nov 24 file (all painted) is in as model v12. Their sit_idle (20 s, keys to 12 s) is cut into
+  sit_idle_intro 0-12 s (plays once) and sit_idle = the 12 s pose held, until they give timestamps for the real split.
+
 ### Pinned: waiting on you
 - Menu pose jump: the cut times were right (`menu_armor` 0.42 s, `menu_weapon` 0.96 s); GeckoLib's own
   start-then-loop let her drop toward rest when the loop began. Fixed: the menu holds the start's last frame and

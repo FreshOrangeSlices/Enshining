@@ -46,9 +46,9 @@ public final class PlayNetwork {
 		}
 	}
 
-	/** Held movement keys that change how she moves: bit 1 sprint, bit 2 moving at all. */
+	/** Held movement keys that change how she moves: bit 1 sprint, bit 2 moving at all, bit 4 dashing. */
 	public record Input(byte flags) {
-		public static final byte SPRINT = 1, MOVING = 2;
+		public static final byte SPRINT = 1, MOVING = 2, DASH = 4;
 
 		void write(FriendlyByteBuf buf) {
 			buf.writeByte(flags);
@@ -61,7 +61,7 @@ public final class PlayNetwork {
 		void handle(Supplier<NetworkEvent.Context> context) {
 			ServerPlayer player = context.get().getSender();
 			if (player != null) {
-				PlayAs.input(player, (flags & SPRINT) != 0, (flags & MOVING) != 0);
+				PlayAs.input(player, (flags & SPRINT) != 0, (flags & MOVING) != 0, (flags & DASH) != 0);
 			}
 		}
 	}
