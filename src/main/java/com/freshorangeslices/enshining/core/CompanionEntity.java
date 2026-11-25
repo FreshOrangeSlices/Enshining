@@ -114,6 +114,9 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 	protected static final RawAnimation JOG = RawAnimation.begin().thenLoop("animation.companion.jog");
 	/** Sitting, layered over SIT (its own controller): her sitting idle, the one that can bring out her props. */
 	protected static final RawAnimation SIT_IDLE = RawAnimation.begin().thenLoop("animation.companion.sit_idle");
+	protected static final RawAnimation SIT_IDLE_INTRO = RawAnimation.begin().thenPlayAndHold("animation.companion.sit_idle_intro");
+	private static final int SIT_BLEND = 6;
+	private boolean sitIntroPlayed;   // client side: her sitting idle's start has played this time she sat
 	protected static final RawAnimation JUMP = RawAnimation.begin().thenLoop("animation.companion.jump");
 	protected static final RawAnimation SWIM = RawAnimation.begin().thenLoop("animation.companion.swim");
 	protected static final RawAnimation ATTACK = RawAnimation.begin().thenPlay("animation.companion.attack");
@@ -382,6 +385,12 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 	public final java.util.Map<String, Float> propIn = new java.util.HashMap<>();
 	public final java.util.Map<String, Boolean> propWanted = new java.util.HashMap<>();
 	public float propLastTime;
+	/**
+	 * Client side: for a prop whose animation sets its size (the teapot popping in mid-animation), that size now
+	 * (largest axis) and whether it's growing (1), shrinking (-1) or steady (0), for the sparkle.
+	 */
+	public final java.util.Map<String, Float> propScale = new java.util.HashMap<>();
+	public final java.util.Map<String, Integer> propPop = new java.util.HashMap<>();
 	public float weaponLastTime = -1.0F;
 	private float lookBlend = 1.0F;  // client side: how much the head looks at things (0 in a fight), eased per tick
 	private float lookBlendO = 1.0F;
@@ -1359,11 +1368,29 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 			RawAnimation fidget = idleFidget(state, wasIdle);
 			return state.setAndContinue(fidget != null ? fidget : IDLE);
 		}));
-		// Sitting: her sitting idle on top of the sit pose (it keys what it moves; the sit pose keeps the rest).
-		controllers.add(new AnimationController<>(this, "sitting", 6, state -> {
+		// Sitting: her sitting idle on top of the sit pose (it keys what it moves; the sit pose keeps the rest). With a
+		// "sit_idle_intro" (sitting down, pouring the tea), that plays once first, then the loop starts from its last
+		// frame with no blend. Switched here rather than queued: GeckoLib's play-then-loop sags toward rest between.
+		controllers.add(new AnimationController<>(this, "sitting", SIT_BLEND, state -> {
 			if (menuAnimation == null && isInSittingPose() && hasAnimation("animation.companion.sit_idle")) {
+				var baked = bakedAnimations();
+				var intro = baked == null ? null : baked.getAnimation("animation.companion.sit_idle_intro");
+				// Its blend in delays its start, so it ends about SIT_BLEND ticks after its length; a little late only holds
+				// its last frame.
+				if (intro != null && sittingTicks <= intro.length() + SIT_BLEND + 1) {
+					if (!sitIntroPlayed) {
+						sitIntroPlayed = true;
+						state.getController().setTransitionLength(SIT_BLEND);
+					}
+					return state.setAndContinue(SIT_IDLE_INTRO);
+				}
+				if (sitIntroPlayed) {
+					state.getController().setTransitionLength(0);
+				}
 				return state.setAndContinue(SIT_IDLE);
 			}
+			sitIntroPlayed = false;
+			state.getController().setTransitionLength(SIT_BLEND);
 			return PlayState.STOP;
 		}));
 	}

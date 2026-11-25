@@ -99,12 +99,26 @@ Nothing here is built yet unless marked done. Order is roughly the order we'll d
   were for where the props used to be and are gone); one scale key on each hand prop so they show.
 - Props packed tight into the top of the right half (rows 0-92; `tools/repack.py`), the user's paint carried over.
 
+### Update 2026-11-24 (the user's answers on their Nov 24 v11)
+- Test Dummy removed from the mod (user: it's Mark 2 material); its code is in git history for then.
+- Props: an animation can pop a prop itself by keying its size to 0 (the teapot appearing mid-pour at 1.21 s): it
+  sparkles while that size grows from 0 or shrinks to 0, never while held at 0 (it may be far off then), and one
+  already shrunk away when its animation ends doesn't come back to fade out.
+- Sitting: `animation.companion.sit_idle_intro`, if there is one, plays once when she sits (sit down, pour, sip),
+  then `sit_idle` loops from its last frame with no blend. The user's sit_idle is one long piece for now; when
+  it's done, cut it with `bb_export.py --cut` at the time they give (they said the split is the plan).
+- Eyes from animations: key the size of an eye sheet (`eyes_open` / `eyes_half` / `eyes_closed`; `eyes_happy`
+  isn't drawn and falls back to closed), 1 = show, 0 = not. While a keyed sheet is at 0.5+, the biggest shows;
+  keyed open still blinks and skips the dozing; none at 0.5+ = the usual rules. Hurt still shuts them.
+- Pauldron stays (hidden in Blockbench only while animating). Scarf, geo orb, flow bangs stay in Mark 1 (user:
+  "Mark 1 is gonna have everything", Mark 2 is far off).
+- Piloting her (Later list): the user asked for a prototype, with block breaking; questions sent 2026-11-24.
+
 ### Pinned: waiting on you
 - Menu pose jump: the cut times were right (`menu_armor` 0.42 s, `menu_weapon` 0.96 s); GeckoLib's own
   start-then-loop let her drop toward rest when the loop began. Fixed: the menu holds the start's last frame and
   switches to the loop itself, with no blend. Check it in game.
 - Paint the belt bow's new 3x spot and the mini shield's 5x7 faces (grey placeholder now).
-- Test Dummy: keep until Mark 1 is done, then out of the release? (unanswered)
 
 ## Companion menu (right-click her)
 - Equipment: 4 armor slots + 1 weapon slot (no other storage).

@@ -310,9 +310,17 @@ public class CompanionRenderer<T extends CompanionEntity> extends GeoEntityRende
 				}
 			}
 			for (var prop : propBones.entrySet()) {
-				float in = companion.propIn.getOrDefault(prop.getKey(), 0.0F);
-				if (in > 0 && in < 1) {
-					sparkle(companion, prop.getValue(), frame, companion.propWanted.getOrDefault(prop.getKey(), false));
+				String name = prop.getKey();
+				float in = companion.propIn.getOrDefault(name, 0.0F);
+				float size = companion.propScale.getOrDefault(name, 1.0F);
+				if (in <= 0 || size <= 0.02F) {
+					continue;   // nothing to see (a teapot its animation still holds at size 0, far off)
+				}
+				int pop = companion.propPop.getOrDefault(name, 0);
+				if (in < 1) {
+					sparkle(companion, prop.getValue(), frame, companion.propWanted.getOrDefault(name, false));
+				} else if (pop != 0 && size < 0.98F) {
+					sparkle(companion, prop.getValue(), frame, pop > 0);   // its animation popping it in or out
 				}
 			}
 		}

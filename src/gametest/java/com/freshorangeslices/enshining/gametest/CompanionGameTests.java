@@ -42,19 +42,6 @@ public final class CompanionGameTests {
 	}
 
 	@GameTest(template = "empty")
-	public static void testDummyIsAPlainCompanion(GameTestHelper helper) {
-		var dummy = helper.spawn(ModEntities.TEST_DUMMY.get(), new BlockPos(2, 2, 2));
-		ServerPlayer player = player(helper);
-		for (int i = 0; i < 60 && !dummy.isTame(); i++) {
-			player.setItemInHand(InteractionHand.MAIN_HAND, new ItemStack(Items.APPLE));
-			dummy.mobInteract(player, InteractionHand.MAIN_HAND);
-		}
-		helper.assertTrue(dummy.getMaxHealth() == 20.0F, "20 health: " + dummy.getMaxHealth());
-		helper.assertTrue(dummy.isTame(), "Apples befriend the test dummy");
-		helper.succeed();
-	}
-
-	@GameTest(template = "empty")
 	public static void wildNoelleHasHerStats(GameTestHelper helper) {
 		NoelleEntity noelle = noelle(helper);
 		helper.assertFalse(noelle.isTame(), "A new Noelle is wild");

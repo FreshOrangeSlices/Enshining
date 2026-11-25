@@ -30,7 +30,5 @@
   "enshining.menu.tune.armor": "Armor",
   "enshining.menu.tune.zoom": "Zoom: %s",
   "enshining.menu.tune.height": "Height: %s",
-  "enshining.menu.tune.turn": "Turn: %s°",
-  "entity.enshining.test_dummy": "Test Dummy (experiments)",
-  "item.enshining.test_dummy_spawn_egg": "Test Dummy Spawn Egg"
+  "enshining.menu.tune.turn": "Turn: %s°"
 }

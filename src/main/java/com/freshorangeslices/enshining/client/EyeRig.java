@@ -15,7 +15,7 @@ import software.bernie.geckolib.cache.object.GeoVertex;
 import software.bernie.geckolib.core.animatable.model.CoreGeoBone;
 
 /**
- * Moving eyes (an experiment, on the test dummy only; no character uses it yet). The build, from the Linky Playz
+ * Moving eyes (an experiment; no character uses it yet, and the test dummy that tried it out is gone until Mark 2). The build, from the Linky Playz
  * short: each eye is a white plane ("eye_left" / "eye_right") with a pupil plane in front of it ("pupil_left" /
  * "pupil_right", inside the eye group). The behaviour, after Fresh Animations' mobs: the head turns toward what
  * she looks at as far as it may and the pupils take the rest; she meets your eyes when you look at her (or her

@@ -126,7 +126,11 @@ public class CompanionModel<T extends CompanionEntity> extends DefaultedEntityGe
 			head.setRotY(baseY + animY + limitLook(lookY, animY, 1.3F));
 		}
 		weapons(companion, state, scaledBones(state));
-		props(companion, instanceId, state.getPartialTick());
+		// What every playing controller keys (her main animation and the sitting layer), and which of those it sizes.
+		Set<String> keyedAny = new HashSet<>();
+		Set<String> scaledAny = new HashSet<>();
+		playing(companion, instanceId, keyedAny, scaledAny);
+		props(companion, keyedAny, scaledAny, state.getPartialTick());
 		vanillaLimbs(companion, state, animated);
 
 		// The whole skirt sways a little with each step and breathes when still, heavier when running or in the air
@@ -140,7 +144,7 @@ public class CompanionModel<T extends CompanionEntity> extends DefaultedEntityGe
 		float trail = airborne ? 0.05F : running ? 0.03F : 0.0F;
 		sway("skirt", 0.0F, 0.03F * heavy, trail * 0.5F, 0.07F, swing, amount, time, animated);
 		skirtRing(companion, time, state.getPartialTick());
-		eyes(companion, time);
+		eyes(companion, time, scaledAny);
 		EyeRig.apply(this, companion, time, state.getPartialTick(), expression(companion, time));   // experiments only
 		flow(companion, state, time, swing, amount, animated);
 		// Armor pieces of the rig stay hidden until armor drawing is in.
@@ -155,15 +159,49 @@ public class CompanionModel<T extends CompanionEntity> extends DefaultedEntityGe
 	 * Props (each group inside "props", like her couch, and any group named "prop_..." wherever it is, like the
 	 * teapot in her hand) belong to the animations that use them: each one shows only while a playing animation (any
 	 * of her controllers: the sitting idle has its own) keys it or anything inside it, and appears and vanishes like
-	 * her weapons (grows in over 0.2 s with a sparkle).
+	 * her weapons (grows in over 0.2 s with a sparkle). An animation can also pop a prop in or out itself by keying
+	 * its size to 0 (the teapot appearing mid-pour): it sparkles while that size grows from 0 or shrinks to 0, and if
+	 * it was already shrunk away when its animation ends, it doesn't come back to fade out.
 	 */
-	private void props(T companion, long instanceId, float partialTick) {
+	private void props(T companion, Set<String> keyed, Set<String> scaled, float partialTick) {
 		List<CoreGeoBone> found = props();
 		if (found.isEmpty()) {
 			return;
 		}
-		Set<String> keyed = new HashSet<>();
-		Set<String> scaled = new HashSet<>();
+		float time = companion.tickCount + partialTick;
+		float dt = companion.propLastTime == 0 ? 1 : Mth.clamp(time - companion.propLastTime, 0, 5);
+		companion.propLastTime = time;
+		for (CoreGeoBone prop : found) {
+			String name = prop.getName();
+			boolean wanted = keyedWithin(prop, keyed) || keyed.contains("props") && prop.getParent() != null
+					&& "props".equals(prop.getParent().getName());
+			boolean sized = scaled.contains(name);
+			if (sized) {
+				// Its animation's own size for it this frame (GeckoLib has written it; materialise comes after).
+				float size = Math.max(Math.abs(prop.getScaleX()), Math.max(Math.abs(prop.getScaleY()), Math.abs(prop.getScaleZ())));
+				float was = companion.propScale.getOrDefault(name, size);
+				companion.propPop.put(name, size > was + 1.0E-4F ? 1 : size < was - 1.0E-4F ? -1 : 0);
+				companion.propScale.put(name, size);
+			} else {
+				companion.propPop.put(name, 0);
+				if (wanted) {
+					companion.propScale.remove(name);
+				}
+			}
+			// Already shrunk to nothing by its animation: gone at once, rather than reappearing to fade out.
+			boolean shrunkAway = !wanted && companion.propScale.getOrDefault(name, 1.0F) <= 0.02F;
+			float in = shrunkAway ? 0 : Mth.approach(companion.propIn.getOrDefault(name, 0.0F), wanted ? 1 : 0, dt / 4.0F);
+			companion.propIn.put(name, in);
+			companion.propWanted.put(name, wanted);
+			prop.setHidden(in <= 0);
+			if (in > 0) {
+				materialise(prop, in, sized);
+			}
+		}
+	}
+
+	/** The bones the animations of all her playing controllers key, and those they set the size of. */
+	private void playing(T companion, long instanceId, Set<String> keyed, Set<String> scaled) {
 		var manager = companion.getAnimatableInstanceCache().getManagerForId(instanceId);
 		for (var controller : manager.getAnimationControllers().values()) {
 			AnimationProcessor.QueuedAnimation current = controller.getCurrentAnimation();
@@ -175,20 +213,6 @@ public class CompanionModel<T extends CompanionEntity> extends DefaultedEntityGe
 				if (keysScale(bone)) {
 					scaled.add(bone.boneName());
 				}
-			}
-		}
-		float time = companion.tickCount + partialTick;
-		float dt = companion.propLastTime == 0 ? 1 : Mth.clamp(time - companion.propLastTime, 0, 5);
-		companion.propLastTime = time;
-		for (CoreGeoBone prop : found) {
-			boolean wanted = keyedWithin(prop, keyed) || keyed.contains("props") && prop.getParent() != null
-					&& "props".equals(prop.getParent().getName());
-			float in = Mth.approach(companion.propIn.getOrDefault(prop.getName(), 0.0F), wanted ? 1 : 0, dt / 4.0F);
-			companion.propIn.put(prop.getName(), in);
-			companion.propWanted.put(prop.getName(), wanted);
-			prop.setHidden(in <= 0);
-			if (in > 0) {
-				materialise(prop, in, scaled.contains(prop.getName()));
 			}
 		}
 	}
@@ -290,8 +314,12 @@ public class CompanionModel<T extends CompanionEntity> extends DefaultedEntityGe
 	 * seconds she drifts, dozing (half-closed) and flicking awake, dozing more and more; then a minute of full
 	 * dozing, nodding off now and then; after that she sleeps (closed). Shut while hurt, and in the menu's armor
 	 * pose. An expression not drawn yet falls back to open.
+	 *
+	 * An animation can set her face itself (closing her eyes for a sip of tea): key the size of an eye sheet, 1 to
+	 * show it and 0 not to. While a keyed sheet is at 0.5 or more, the biggest one shows; keyed open eyes still
+	 * blink (and skip the dozing). When none is, the rules above decide. Hurt still shuts them.
 	 */
-	private void eyes(T companion, float time) {
+	private void eyes(T companion, float time, Set<String> scaled) {
 		CoreGeoBone[] bones = new CoreGeoBone[EYES.length];
 		boolean any = false;
 		for (int i = 0; i < EYES.length; i++) {
@@ -303,6 +331,12 @@ public class CompanionModel<T extends CompanionEntity> extends DefaultedEntityGe
 		}
 		int sat = companion.sittingTicks;
 		int look = expression(companion, time);
+		int keyed = keyedFace(bones, scaled);
+		boolean shut = companion.hurtTime > 0 || companion.deathTime > 0 || companion.menuEyesClosed;
+		if (keyed >= 0 && !shut) {
+			boolean busy = companion.inCombat() || companion.getDeltaMovement().horizontalDistanceSqr() > 0.0004;
+			look = keyed == OPEN ? blink(companion.getId(), time, busy) : keyed;
+		}
 		if (look == HAPPY && !drawn(bones[HAPPY])) {
 			look = CLOSED;
 		}
@@ -317,6 +351,30 @@ public class CompanionModel<T extends CompanionEntity> extends DefaultedEntityGe
 				bones[i].setHidden(i != look);
 			}
 		}
+		// A keyed sheet's size only picks the face: the one showing is drawn at its own size (even one keyed to 0, as
+		// when a blink shows the closed sheet).
+		if (bones[look] != null && scaled.contains(EYES[look])) {
+			var rest = bones[look].getInitialSnapshot();
+			bones[look].setScaleX(rest.getScaleX());
+			bones[look].setScaleY(rest.getScaleY());
+			bones[look].setScaleZ(rest.getScaleZ());
+		}
+	}
+
+	/** The face a playing animation asks for by keying the eye sheets' size (-1: none, the usual rules decide). */
+	private static int keyedFace(CoreGeoBone[] bones, Set<String> scaled) {
+		int pick = -1;
+		float best = 0.5F;
+		for (int i = 0; i < EYES.length; i++) {
+			if (bones[i] != null && scaled.contains(EYES[i])) {
+				float size = Math.max(Math.abs(bones[i].getScaleX()), Math.abs(bones[i].getScaleY()));
+				if (size >= best) {
+					best = size;
+					pick = i;
+				}
+			}
+		}
+		return pick;
 	}
 
 	/**
