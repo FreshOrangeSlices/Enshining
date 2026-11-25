@@ -142,6 +142,17 @@ Nothing here is built yet unless marked done. Order is roughly the order we'll d
   m_90566_), zoom 3-10; Steve, hotbar, hearts, food, XP, crosshair hidden; party list on the right.
 - Next: step 2 = her attacks, charged hold, skill and burst on keys, canceling, F; step 3 = mining.
 
+### Combat tuning (2026-11-25; local branch combat-tune, NOT pushed: the user said not to push yet)
+- User's answers: X = monsters / everything (villagers, golems, pets, players, companions never); keep Genshin's
+  hold (0.5 s chosen); finisher: blend for now, they re-animate later; walking off a held pose resets the combo;
+  hit 4 skips to the slam in both modes (cause not found in files or code: need a clip).
+- Built: press-to-hit, 0.5 s hold -> charge, 4 s played window, 1-block lunge per played hit, dash/jump cancel the
+  charged attack too, attacks/skill/burst end the sprint (re-press Shift), held pose counts as done (PAUSED) so
+  walking takes over (AI too), Sweeping Time keeps aura + claymore out, charged finish blends in 4 ticks (server
+  hit/end +4), isFoe() replaces the Enemy filters on damage paths. 3 new game tests (23 total), not yet run.
+- User's art list added: re-animate charged_finish's start from the spin pose; jog head bob; sharper sprint lean;
+  smoother transitions (a sprint-into-jog piece).
+
 ### Play as her, step 2: combat (2026-11-25, in the main build; CI 20 tests)
 - Left click tap = next combo hit (clicks mid-hit kept 8 ticks); hits land on the nearest enemy in her arc
   (cleaveArc, or 60 degrees for a hit without one) plus the rest of the arc; held 6 ticks = charged attack (let go
