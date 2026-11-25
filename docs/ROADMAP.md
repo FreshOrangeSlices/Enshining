@@ -113,6 +113,18 @@ Nothing here is built yet unless marked done. Order is roughly the order we'll d
 - Pauldron stays (hidden in Blockbench only while animating). Scarf, geo orb, flow bangs stay in Mark 1 (user:
   "Mark 1 is gonna have everything", Mark 2 is far off).
 - Piloting her (Later list): the user asked for a prototype, with block breaking; questions sent 2026-11-24.
+- Dozing while she sits: kept as is.
+
+### Playing as her (decided 2026-11-24; the mod's "ideal plan", goes in the main build)
+- You BECOME her for that moment (not mech-style: no idle Steve left behind; user's girlfriend vetoed that).
+- Controls like Genshin Impact, vanilla controls off while you're her; J (unused) to hop out.
+- Blocks: what an iron pickaxe/axe/shovel can break. Her attacks are how she mines: each hit adds 25% break
+  progress to the blocks in her swing (her extended reach), lingering 4 s and stacking hit to hit; skills too.
+  Never below her: from her feet up, 3 blocks tall (her height + 1).
+- Camera 6 blocks back; asked whether it can pass through walls (vanilla pulls it in front of them).
+- Singleplayer first, servers eventually.
+- Open (follow-ups sent 2026-11-24): her health vs yours, getting in, the key map, charged attack on hold,
+  stamina, hardness scaling, blocks never broken, a mining on/off key, digging down, wall clipping, test order.
 
 ### Pinned: waiting on you
 - Menu pose jump: the cut times were right (`menu_armor` 0.42 s, `menu_weapon` 0.96 s); GeckoLib's own
@@ -161,5 +173,5 @@ Nothing here is built yet unless marked done. Order is roughly the order we'll d
 ## Later (notes only)
 - Death: she drops an item that re-summons her (like the modpack's pet system).
 - HUD: a portrait per companion with a health bar.
-- Piloting a companion (Steve idle and defenseless, bigger third-person camera).
+- Piloting a companion: superseded by "Playing as her" above (you become her; no idle Steve).
 - Childe (man rig: +1 head, +1 torso) and Lumine (girl rig); universal hovering back weapon.
