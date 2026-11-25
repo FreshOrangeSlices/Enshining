@@ -14,6 +14,8 @@ public final class ModItems {
 
 	public static final RegistryObject<Item> NOELLE_SPAWN_EGG = ITEMS.register("noelle_spawn_egg",
 			() -> new ForgeSpawnEggItem(ModEntities.NOELLE, 0x2A2A34, 0xD6AA40, new Item.Properties()));
+	public static final RegistryObject<Item> TEST_DUMMY_SPAWN_EGG = ITEMS.register("test_dummy_spawn_egg",
+			() -> new ForgeSpawnEggItem(ModEntities.TEST_DUMMY, 0xB8B8B8, 0x6A6A78, new Item.Properties()));
 
 	private ModItems() {
 	}
@@ -21,6 +23,7 @@ public final class ModItems {
 	public static void creativeTabs(BuildCreativeModeTabContentsEvent event) {
 		if (event.getTabKey() == CreativeModeTabs.SPAWN_EGGS) {
 			event.accept(NOELLE_SPAWN_EGG);
+			event.accept(TEST_DUMMY_SPAWN_EGG);
 		}
 	}
 }

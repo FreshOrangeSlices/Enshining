@@ -95,6 +95,12 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 	/** The charged attack's stage (0 none, 1 wind-up, 2 spin, 3 finish), for the clients' animation. */
 	private static final EntityDataAccessor<Integer> CHARGE = SynchedEntityData.defineId(CompanionEntity.class, EntityDataSerializers.INT);
 	private static final int CHARGE_START = 1, CHARGE_SPIN = 2, CHARGE_FINISH = 3;
+	/**
+	 * Off-field: in the party of someone playing as one of you, but not the one they are right now (Genshin's
+	 * party): hidden, untouchable, no AI, carried along with the one they play. Never saved: after a reload she's
+	 * simply back.
+	 */
+	private static final EntityDataAccessor<Boolean> OFF_FIELD = SynchedEntityData.defineId(CompanionEntity.class, EntityDataSerializers.BOOLEAN);
 	/** Slow, like sneaking, while she spins. */
 	private static final UUID SPIN_SLOW = UUID.fromString("5e3b1c2a-7d41-4c55-9a0e-0e1a1f000008");
 	/** How long (ticks) she lingers on a combo hit's last frame waiting for the next one before the combo resets. */
@@ -292,6 +298,7 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 		entityData.define(CHARGE, 0);
 		entityData.define(SETTINGS, DEFAULT_SETTINGS);
 		entityData.define(BEHAVIOR, CompanionBehavior.AGGRESSIVE.ordinal());
+		entityData.define(OFF_FIELD, false);
 	}
 
 	// ---- Menu settings ----------------------------------------------------------------------------------------
@@ -392,6 +399,13 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 	public final java.util.Map<String, Float> propScale = new java.util.HashMap<>();
 	public final java.util.Map<String, Integer> propPop = new java.util.HashMap<>();
 	public float weaponLastTime = -1.0F;
+	/** Server side, while someone plays as her: whether their keys have her running (sprint held and moving). */
+	public boolean pilotRunning;
+	/** Client side, on the client playing as her: sprint held, ticks of dash left, jump held (set each tick by its keys). */
+	public boolean pilotSprinting, pilotJump;
+	public int pilotDashTicks;
+	/** When she was befriended (game time): her place in her owner's party. 0 for companions from before this. */
+	private long befriendedAt;
 	private float lookBlend = 1.0F;  // client side: how much the head looks at things (0 in a fight), eased per tick
 	private float lookBlendO = 1.0F;
 
@@ -916,6 +930,7 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 		tag.putInt("Energy", energy);
 		tag.putInt("MenuSettings", entityData.get(SETTINGS));
 		tag.putString("Behavior", behavior().name());
+		tag.putLong("BefriendedAt", befriendedAt);
 	}
 
 	@Override
@@ -933,11 +948,162 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 		if (tag.contains("MenuSettings")) {
 			entityData.set(SETTINGS, tag.getInt("MenuSettings"));
 		}
+		befriendedAt = tag.getLong("BefriendedAt");
 		try {
 			entityData.set(BEHAVIOR, CompanionBehavior.valueOf(tag.getString("Behavior")).ordinal());
 		} catch (IllegalArgumentException ignored) {
 			entityData.set(BEHAVIOR, CompanionBehavior.AGGRESSIVE.ordinal());
 		}
+	}
+
+	// ---- Being played as (see play.PlayAs) -------------------------------------------------------------------------
+
+	/** Speeds while played as (blocks per tick, before ground friction): a player's walk, a jog, the dash. */
+	private static final float PLAY_WALK = 0.09F, PLAY_JOG = 0.13F, PLAY_DASH = 0.18F;
+	/** How fast she turns to face where your keys send her (degrees per tick). */
+	private static final float PLAY_TURN = 45.0F;
+
+	public long befriendedAt() {
+		return befriendedAt;
+	}
+
+	public boolean isOffField() {
+		return entityData.get(OFF_FIELD);
+	}
+
+	public void setOffField(boolean off) {
+		entityData.set(OFF_FIELD, off);
+		noPhysics = off;
+		if (off) {
+			getNavigation().stop();
+			setTarget(null);
+			setDeltaMovement(Vec3.ZERO);
+		}
+		refreshControl();
+	}
+
+	/** Her AI stands down while you play as her or she's off-field, and comes back after. */
+	public void refreshControl() {
+		updateControlFlags();
+	}
+
+	@Override
+	protected void updateControlFlags() {
+		super.updateControlFlags();
+		boolean free = !(getControllingPassenger() instanceof Player) && !isOffField();
+		if (!free) {
+			goalSelector.setControlFlag(Goal.Flag.MOVE, false);
+			goalSelector.setControlFlag(Goal.Flag.JUMP, false);
+			goalSelector.setControlFlag(Goal.Flag.LOOK, false);
+		}
+		targetSelector.setControlFlag(Goal.Flag.TARGET, free);
+	}
+
+	/** You, playing as her, steer her. */
+	@Nullable
+	@Override
+	public LivingEntity getControllingPassenger() {
+		return getFirstPassenger() instanceof Player player ? player : super.getControllingPassenger();
+	}
+
+	/** Nothing climbs onto her except you playing as her (started with force, so this doesn't stop that). */
+	@Override
+	protected boolean canAddPassenger(Entity passenger) {
+		return false;
+	}
+
+	/** You sit inside her with your eyes at hers, so the camera turns about her head. */
+	@Override
+	public double getPassengersRidingOffset() {
+		return getEyeHeight() - 1.62 + 0.35;
+	}
+
+	/**
+	 * On the client playing as her: Genshin's movement. Your keys point relative to the camera; she turns to face that
+	 * way and runs where she faces (so S turns her round toward you, rather than walking her backwards).
+	 */
+	@Override
+	protected void tickRidden(Player player, Vec3 travelVector) {
+		super.tickRidden(player, travelVector);
+		if (!level().isClientSide) {
+			return;
+		}
+		float forward = player.zza;
+		float side = player.xxa;
+		if (forward * forward + side * side > 1.0E-4F) {
+			float yaw = player.getYRot() * Mth.DEG_TO_RAD;
+			double dx = side * Mth.cos(yaw) - forward * Mth.sin(yaw);
+			double dz = forward * Mth.cos(yaw) + side * Mth.sin(yaw);
+			float want = (float) (Mth.atan2(dz, dx) * Mth.RAD_TO_DEG) - 90.0F;
+			setYRot(Mth.approachDegrees(getYRot(), want, PLAY_TURN));
+		}
+		setXRot(0.0F);
+		setYBodyRot(getYRot());
+		setYHeadRot(getYRot());
+		setJumping(pilotJump);
+	}
+
+	@Override
+	protected Vec3 getRiddenInput(Player player, Vec3 travelVector) {
+		float amount = Math.min(1.0F, Mth.sqrt(player.xxa * player.xxa + player.zza * player.zza));
+		return new Vec3(0.0, 0.0, amount);
+	}
+
+	@Override
+	protected float getRiddenSpeed(Player player) {
+		if (action() == ACTION_SKILL) {
+			return 0.0F;
+		}
+		float speed = pilotSprinting ? (pilotDashTicks > 0 ? PLAY_DASH : PLAY_JOG) : PLAY_WALK;
+		if (action() == ACTION_BURST) {
+			speed *= 0.5F;
+		}
+		if (entityData.get(CHARGE) == CHARGE_SPIN) {
+			speed *= 0.3F;
+		}
+		return speed;
+	}
+
+	@Override
+	public void travel(Vec3 travelVector) {
+		if (isOffField()) {
+			setDeltaMovement(Vec3.ZERO);
+			return;
+		}
+		super.travel(travelVector);
+	}
+
+	@Override
+	public boolean isInvisible() {
+		return isOffField() || super.isInvisible();
+	}
+
+	@Override
+	public boolean isSilent() {
+		return isOffField() || super.isSilent();
+	}
+
+	@Override
+	public boolean isPushable() {
+		return !isOffField() && !isVehicle() && super.isPushable();
+	}
+
+	@Override
+	public boolean isPickable() {
+		return !isOffField() && super.isPickable();
+	}
+
+	@Override
+	public boolean isAttackable() {
+		return !isOffField() && super.isAttackable();
+	}
+
+	@Override
+	public void die(DamageSource source) {
+		if (!level().isClientSide && getFirstPassenger() instanceof ServerPlayer player) {
+			com.freshorangeslices.enshining.play.PlayAs.fell(player, this);
+		}
+		super.die(source);
 	}
 
 	// ---- Behaviour --------------------------------------------------------------------------------------------
@@ -1047,6 +1213,9 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 
 	@Override
 	public boolean hurt(DamageSource source, float amount) {
+		if (isOffField()) {
+			return false;
+		}
 		Entity attacker = source.getEntity();
 		if (attacker != null && isTame() && attacker.getUUID().equals(getOwnerUUID())) {
 			return false; // the owner's stray swings never land
@@ -1123,8 +1292,11 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 		// Sprinting (synced) while chasing or catching up, so clients pick the run animation; strolling stays a walk.
 		// Breaking into a run after 2 s or more of walking or standing starts with a 0.5 s dash at 1.35x speed
 		// (the run animation), then she jogs at her normal running speed.
-		boolean running = !comboActive && getNavigation().isInProgress() && getMoveControl().getSpeedModifier() >= 1.05;
-		if (running && !isSprinting() && calmTicks >= DASH_AFTER_CALM) {
+		boolean piloted = getControllingPassenger() instanceof Player;
+		boolean running = piloted ? pilotRunning && !comboActive
+				: !comboActive && getNavigation().isInProgress() && getMoveControl().getSpeedModifier() >= 1.05;
+		// Played as: every sprint starts with the dash (Genshin's), however recently she last ran.
+		if (running && !isSprinting() && (piloted || calmTicks >= DASH_AFTER_CALM)) {
 			dashTicks = DASH_TICKS;
 		}
 		calmTicks = running ? 0 : calmTicks + 1;
@@ -1239,6 +1411,7 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 	/** Befriends this companion to the player at once (the gift roll already passed). */
 	public void befriend(Player player) {
 		tame(player);
+		befriendedAt = level().getGameTime();
 		getNavigation().stop();
 		setTarget(null);
 		setMode(CompanionMode.FOLLOW);

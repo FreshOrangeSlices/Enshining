@@ -25,7 +25,18 @@ public final class ClientSetup {
 	}
 
 	@SubscribeEvent
+	public static void keys(net.minecraftforge.client.event.RegisterKeyMappingsEvent event) {
+		PlayAsClient.keys().forEach(event::register);
+	}
+
+	@SubscribeEvent
+	public static void overlays(net.minecraftforge.client.event.RegisterGuiOverlaysEvent event) {
+		event.registerAboveAll("party", (gui, graphics, partialTick, width, height) -> PlayAsClient.renderParty(graphics, width, height));
+	}
+
+	@SubscribeEvent
 	public static void renderers(EntityRenderersEvent.RegisterRenderers event) {
 		event.registerEntityRenderer(ModEntities.NOELLE.get(), context -> new CompanionRenderer<>(context, new NoelleModel()));
+		event.registerEntityRenderer(ModEntities.TEST_DUMMY.get(), context -> new CompanionRenderer<>(context, new TestDummyModel()));
 	}
 }

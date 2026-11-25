@@ -30,5 +30,16 @@
   "enshining.menu.tune.armor": "Armor",
   "enshining.menu.tune.zoom": "Zoom: %s",
   "enshining.menu.tune.height": "Height: %s",
-  "enshining.menu.tune.turn": "Turn: %s°"
+  "enshining.menu.tune.turn": "Turn: %s°",
+  "entity.enshining.test_dummy": "Test Dummy (experiments)",
+  "item.enshining.test_dummy_spawn_egg": "Test Dummy Spawn Egg",
+  "enshining.menu.play": "Play as %s",
+  "enshining.play.started": "You are %s. Press %s to hop out.",
+  "key.categories.enshining": "Enshining: playing as a companion",
+  "key.enshining.hop_out": "Hop out",
+  "key.enshining.sprint": "Sprint (dash, then jog)",
+  "key.enshining.party_1": "Party member 1",
+  "key.enshining.party_2": "Party member 2",
+  "key.enshining.party_3": "Party member 3",
+  "key.enshining.party_4": "Party member 4"
 }

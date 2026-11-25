@@ -23,5 +23,7 @@ public final class Enshining {
 		modBus.addListener(ModEntities::spawnPlacements);
 		modBus.addListener(ModItems::creativeTabs);
 		MinecraftForge.EVENT_BUS.register(CompanionEvents.class);
+		MinecraftForge.EVENT_BUS.register(com.freshorangeslices.enshining.play.PlayAs.class);
+		com.freshorangeslices.enshining.play.PlayNetwork.register();
 	}
 }

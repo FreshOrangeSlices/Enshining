@@ -91,6 +91,17 @@ public class CompanionScreen extends AbstractContainerScreen<CompanionMenu> {
 		}
 		aimY = aimYO = 1.0F;
 		addTuningPanel();
+		if (real != null) {
+			// Play as her (Genshin-style: you become her; J hops out).
+			int w = 112;
+			int px = leftPos + imageWidth + 6 + w <= width ? leftPos + imageWidth + 6 : Math.max(2, leftPos - w - 6);
+			addRenderableWidget(net.minecraft.client.gui.components.Button.builder(
+					Component.translatable("enshining.menu.play", real.getDisplayName()), b -> {
+						if (minecraft != null && minecraft.gameMode != null) {
+							minecraft.gameMode.handleInventoryButtonClick(menu.containerId, CompanionMenu.BUTTON_PLAY);
+						}
+					}).bounds(px, topPos + imageHeight - 26, w, 20).build());
+		}
 	}
 
 	private void addTuningPanel() {
