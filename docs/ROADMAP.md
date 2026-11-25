@@ -142,6 +142,18 @@ Nothing here is built yet unless marked done. Order is roughly the order we'll d
   m_90566_), zoom 3-10; Steve, hotbar, hearts, food, XP, crosshair hidden; party list on the right.
 - Next: step 2 = her attacks, charged hold, skill and burst on keys, canceling, F; step 3 = mining.
 
+### Play as her, step 2: combat (2026-11-25, in the main build; CI 20 tests)
+- Left click tap = next combo hit (clicks mid-hit kept 8 ticks); hits land on the nearest enemy in her arc
+  (cleaveArc, or 60 degrees for a hit without one) plus the rest of the arc; held 6 ticks = charged attack (let go
+  in the wind-up: straight to the finish; held: spins until let go, ends at a loop's end, 6 loops max).
+- E skill (cooldown), Q burst (energy); F = BlockState.use on what the camera looks at from her eyes (4.5 blocks).
+- Cancels (dash, jump, skill, charge; walking off a held pose or her ending) reset the combo to hit 1.
+- Client: hits plant her after a small step (comboTravel over the hit's motionEnd), aimed at the nearest Enemy
+  within 5 blocks and 60 degrees of the camera, else the input direction; her facing is the client's, and the
+  server's arcs use getYRot while played (attackYaw()). AI auto-follow-ups, charged, skill and burst off while played.
+- HUD: E (cooldown seconds) and Q (energy fill) bottom right, from synced ABILITIES.
+- Only Enemy mobs are hit (animals not), same as her AI. Next: step 3, mining with her hits.
+
 ### Update 2026-11-25 (the user's test of step 1, and of the Nov 24 fixes)
 - Tested good: combat (claymore in every move, with or without a given weapon), menu hand height, charged attack,
   burst direction, skill range, run cycle, given weapon hovering behind her, walking as her.
