@@ -2,6 +2,7 @@ plugins {
 	id 'eclipse'
 	id 'idea'
 	id 'net.minecraftforge.gradle' version '[6.0.24,6.2)'
+	id 'org.spongepowered.mixin' version '0.7.+'
 }
 
 // Enshining for Forge 1.20.1: elemental companions. CI (.github/workflows/build.yml) runs `./gradlew build runGameTestServer`.
@@ -35,6 +36,8 @@ minecraft {
 	runs {
 		configureEach {
 			workingDirectory project.file('run')
+			property 'mixin.env.remapRefMap', 'true'
+			property 'mixin.env.refMapRemappingFile', "${projectDir}/build/createSrgToMcp/output.srg"
 			property 'forge.logging.markers', 'REGISTRIES'
 			property 'forge.logging.console.level', 'info'
 
@@ -72,6 +75,13 @@ minecraft {
 repositories {
 	mavenCentral()
 	maven {
+		name = 'Sponge'
+		url = 'https://repo.spongepowered.org/repository/maven-public/'
+		content {
+			includeGroup 'org.spongepowered'
+		}
+	}
+	maven {
 		name = 'Modrinth'
 		url = 'https://api.modrinth.com/maven'
 		content {
@@ -83,6 +93,13 @@ repositories {
 dependencies {
 	minecraft "net.minecraftforge:forge:${minecraft_version}-${forge_version}"
 	implementation fg.deobf("maven.modrinth:geckolib:${geckolib_version}")
+	annotationProcessor 'org.spongepowered:mixin:0.8.5:processor'
+}
+
+// One small client mixin: the camera while you play as a companion (see CameraMixin).
+mixin {
+	add sourceSets.main, "${mod_id}.refmap.json"
+	config "${mod_id}.mixins.json"
 }
 
 def resourceProps = [

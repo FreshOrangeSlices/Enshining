@@ -1,0 +1,12 @@
+{
+  "required": false,
+  "minVersion": "0.8",
+  "package": "com.freshorangeslices.enshining.mixin",
+  "compatibilityLevel": "JAVA_17",
+  "refmap": "enshining.refmap.json",
+  "mixins": [],
+  "client": ["CameraMixin"],
+  "injectors": {
+    "defaultRequire": 0
+  }
+}

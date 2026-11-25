@@ -6,6 +6,8 @@ import com.freshorangeslices.enshining.core.CompanionBehavior;
 import com.freshorangeslices.enshining.core.CompanionEntity;
 import com.freshorangeslices.enshining.core.CompanionMenu;
 import com.freshorangeslices.enshining.core.CompanionMode;
+import com.freshorangeslices.enshining.experiments.TestDummyEntity;
+import com.freshorangeslices.enshining.play.PlayAs;
 import com.freshorangeslices.enshining.registry.ModEntities;
 import com.mojang.authlib.GameProfile;
 import java.util.UUID;
@@ -39,6 +41,78 @@ public final class CompanionGameTests {
 		NoelleEntity noelle = helper.spawn(ModEntities.NOELLE.get(), new BlockPos(2, 2, 2));
 		noelle.setNoAi(true);
 		return noelle;
+	}
+
+	@GameTest(template = "empty")
+	public static void testDummyIsAPlainCompanion(GameTestHelper helper) {
+		var dummy = helper.spawn(ModEntities.TEST_DUMMY.get(), new BlockPos(2, 2, 2));
+		ServerPlayer player = player(helper);
+		for (int i = 0; i < 60 && !dummy.isTame(); i++) {
+			player.setItemInHand(InteractionHand.MAIN_HAND, new ItemStack(Items.APPLE));
+			dummy.mobInteract(player, InteractionHand.MAIN_HAND);
+		}
+		helper.assertTrue(dummy.getMaxHealth() == 20.0F, "20 health: " + dummy.getMaxHealth());
+		helper.assertTrue(dummy.isTame(), "Apples befriend the test dummy");
+		helper.succeed();
+	}
+
+	// ---- Playing as her ---------------------------------------------------------------------------------------
+
+	@GameTest(template = "empty")
+	public static void playingAsHerTakesTheHitsForYou(GameTestHelper helper) {
+		NoelleEntity noelle = noelle(helper);
+		ServerPlayer player = player(helper);
+		noelle.befriend(player);
+		helper.assertTrue(PlayAs.start(player, noelle), "You can play as her");
+		helper.assertTrue(player.getVehicle() == noelle, "You're inside her");
+		helper.assertTrue(noelle.getControllingPassenger() == player, "Your keys steer her");
+		Zombie zombie = helper.spawn(EntityType.ZOMBIE, new BlockPos(4, 2, 2));
+		zombie.setNoAi(true);
+		float before = noelle.getHealth();
+		helper.assertTrue(PlayAs.shield(player, helper.getLevel().damageSources().mobAttack(zombie), 4.0F), "The hit never lands on Steve");
+		helper.assertTrue(noelle.getHealth() < before, "It lands on her: " + noelle.getHealth() + " of " + before);
+		PlayAs.hopOut(player);
+		helper.assertFalse(player.isPassenger(), "J: you're Steve again");
+		helper.assertFalse(PlayAs.shield(player, helper.getLevel().damageSources().mobAttack(zombie), 4.0F), "Steve takes his own hits again");
+		helper.succeed();
+	}
+
+	@GameTest(template = "empty")
+	public static void numberKeysSwapWhoYouAre(GameTestHelper helper) {
+		NoelleEntity noelle = noelle(helper);
+		ServerPlayer player = player(helper);
+		noelle.befriend(player);
+		TestDummyEntity dummy = helper.spawn(ModEntities.TEST_DUMMY.get(), new BlockPos(4, 2, 4));
+		dummy.setNoAi(true);
+		dummy.befriend(player);
+		helper.assertTrue(PlayAs.start(player, noelle), "Play as Noelle");
+		helper.assertTrue(dummy.isOffField(), "The rest of the party goes off-field");
+		int slot = PlayAs.party(player).indexOf(dummy);
+		helper.assertTrue(slot >= 0 && PlayAs.party(player).size() == 2, "Both in the party: " + PlayAs.party(player).size());
+		PlayAs.switchTo(player, slot);
+		helper.assertTrue(player.getVehicle() == dummy, "Now you're the dummy");
+		helper.assertTrue(noelle.isOffField() && !dummy.isOffField(), "Noelle off-field, the dummy on");
+		helper.assertTrue(dummy.distanceTo(noelle) < 0.01F, "The dummy took her place: " + dummy.distanceTo(noelle));
+		PlayAs.hopOut(player);
+		helper.assertFalse(player.isPassenger(), "J: Steve again");
+		helper.assertFalse(noelle.isOffField() || dummy.isOffField(), "Everyone's back");
+		helper.succeed();
+	}
+
+	@GameTest(template = "empty", timeoutTicks = 100)
+	public static void whenSheFallsStevePopsOutTwoSecondsLater(GameTestHelper helper) {
+		NoelleEntity noelle = noelle(helper);
+		ServerPlayer player = player(helper);
+		noelle.befriend(player);
+		PlayAs.start(player, noelle);
+		noelle.kill();
+		helper.assertFalse(player.isPassenger(), "Out of her as she falls");
+		helper.assertTrue(PlayAs.isFallen(player), "Steve held hidden for a moment");
+		helper.runAfterDelay(PlayAs.FALL_DELAY - 5, () -> helper.assertTrue(PlayAs.isFallen(player), "Still hidden just before 2 s"));
+		helper.runAfterDelay(PlayAs.FALL_DELAY + 5, () -> {
+			helper.assertFalse(PlayAs.isFallen(player), "Steve's back after 2 s");
+			helper.succeed();
+		});
 	}
 
 	@GameTest(template = "empty")

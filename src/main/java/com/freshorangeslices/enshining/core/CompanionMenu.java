@@ -24,7 +24,7 @@ public class CompanionMenu extends AbstractContainerMenu {
 	/** Layout (shared with the screen): armor down the left of her portrait, the weapon on its right, inventory below. */
 	public static final int ARMOR_X = 22, ARMOR_Y = 26, ARMOR_STEP = 30, WEAPON_X = 218, WEAPON_Y = 70, INV_X = 48, INV_Y = 186;
 	public static final int BUTTON_MODE = 0, BUTTON_BEHAVIOR = 1, BUTTON_ARMOR = 2, BUTTON_WEAPON = 3, BUTTON_SKILL = 4,
-			BUTTON_BURST = 5;
+			BUTTON_BURST = 5, BUTTON_PLAY = 6;
 
 	@Nullable
 	private final CompanionEntity companion;
@@ -143,6 +143,13 @@ public class CompanionMenu extends AbstractContainerMenu {
 			case BUTTON_WEAPON -> companion.toggleSetting(CompanionEntity.SHOW_WEAPON);
 			case BUTTON_SKILL -> companion.toggleSetting(CompanionEntity.SKILL_ON);
 			case BUTTON_BURST -> companion.toggleSetting(CompanionEntity.BURST_ON);
+			case BUTTON_PLAY -> {
+				// Play as her: the menu closes and you become her.
+				if (player instanceof net.minecraft.server.level.ServerPlayer serverPlayer) {
+					serverPlayer.closeContainer();
+					com.freshorangeslices.enshining.play.PlayAs.start(serverPlayer, companion);
+				}
+			}
 			default -> {
 				return false;
 			}

@@ -114,6 +114,12 @@ public class CompanionRenderer<T extends CompanionEntity> extends GeoEntityRende
 	@Nullable
 	private GeoBone headBone;
 
+	/** Off-field party members (someone is playing as another of you) aren't drawn at all. */
+	@Override
+	public boolean shouldRender(T companion, net.minecraft.client.renderer.culling.Frustum frustum, double x, double y, double z) {
+		return !companion.isOffField() && super.shouldRender(companion, frustum, x, y, z);
+	}
+
 	public CompanionRenderer(EntityRendererProvider.Context context, CompanionModel<T> model) {
 		super(context, model);
 		addRenderLayer(new GeoRenderLayer<>(this) {
