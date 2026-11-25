@@ -69,7 +69,7 @@ public final class PlayNetwork {
 	/** A key press: hop out, switch to party slot {@code slot}, or one of her moves. */
 	public record Action(byte action, byte slot) {
 		public static final byte HOP_OUT = 0, SWITCH = 1, ATTACK = 2, CHARGE_BEGIN = 3, CHARGE_END = 4, SKILL = 5, BURST = 6,
-				CANCEL = 7, INTERACT = 8;
+				CANCEL = 7, INTERACT = 8, HITS_ALL = 9, HITS_HOSTILE = 10;
 
 		public Action(byte action) {
 			this(action, (byte) 0);

@@ -159,7 +159,7 @@ public class NoelleEntity extends CompanionEntity {
 		double reach = SKILL_REACH;
 		float damage = 2.0F + (float) getAttributeValue(Attributes.ARMOR) * 0.4F;
 		for (LivingEntity near : level().getEntitiesOfClass(LivingEntity.class, getBoundingBox().inflate(reach + 1.0, 1.0, reach + 1.0),
-				e -> e != this && e instanceof Enemy && e.isAlive() && !(e instanceof TamableAnimal pet && pet.isTame())
+				e -> isFoe(e)
 						&& Math.sqrt(e.distanceToSqr(getX(), e.getY(), getZ())) <= reach + e.getBbWidth() / 2.0)) {
 			if (near.hurt(damageSources().mobAttack(this), damage)) {
 				// The hit's own knockback (0.4) half again: add 0.2 more straight away from her.
@@ -223,7 +223,7 @@ public class NoelleEntity extends CompanionEntity {
 		double downTo = 90.0 - 180.0 * (swingStep + 1) / SWING_STEPS;
 		float damage = 4.0F + (float) getAttributeValue(Attributes.ARMOR) * 0.6F;
 		for (LivingEntity near : level().getEntitiesOfClass(LivingEntity.class, getBoundingBox().inflate(BURST_SWING_REACH + 1.0, 1.5, BURST_SWING_REACH + 1.0),
-				e -> e != this && e instanceof Enemy && e.isAlive() && !(e instanceof TamableAnimal pet && pet.isTame())
+				e -> isFoe(e)
 						&& !swingHit.contains(e.getUUID()))) {
 			double distance = Math.sqrt(near.distanceToSqr(getX(), near.getY(), getZ()));
 			double angle = Mth.wrapDegrees(Mth.atan2(near.getZ() - getZ(), near.getX() - getX()) * Mth.RAD_TO_DEG - 90.0 - attackYaw());
@@ -277,7 +277,7 @@ public class NoelleEntity extends CompanionEntity {
 	/** The magic blade overlay shows during Sweeping Time, whatever weapon she holds. */
 	@Override
 	public boolean weaponAuraActive() {
-		return sweeping() && inCombat();
+		return sweeping();   // the whole of Sweeping Time, with her claymore out (not only while she's fighting)
 	}
 
 	/**
@@ -353,7 +353,7 @@ public class NoelleEntity extends CompanionEntity {
 		if (burstActive()) {
 			float sweep = (float) getAttributeValue(Attributes.ATTACK_DAMAGE) * 0.5F;
 			for (LivingEntity near : level().getEntitiesOfClass(LivingEntity.class, target.getBoundingBox().inflate(2.5),
-					e -> e != target && e != this && e instanceof Enemy && e.isAlive() && e.distanceToSqr(this) < 4.5 * 4.5)) {
+					e -> e != target && isFoe(e) && e.distanceToSqr(this) < 4.5 * 4.5)) {
 				near.hurt(damageSources().mobAttack(this), sweep);
 			}
 			if (server != null) {

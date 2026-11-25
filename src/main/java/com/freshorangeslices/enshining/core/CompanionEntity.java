@@ -107,6 +107,10 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 	private static final UUID SPIN_SLOW = UUID.fromString("5e3b1c2a-7d41-4c55-9a0e-0e1a1f000008");
 	/** How long (ticks) she lingers on a combo hit's last frame waiting for the next one before the combo resets. */
 	private static final int COMBO_WINDOW_TICKS = 20;
+	/** Played as: how long she holds a hit's pose for your next click (4 s). */
+	private static final int PLAY_COMBO_WINDOW_TICKS = 80;
+	/** The charged finish blends in over this many ticks (its first frame doesn't match the wind-up's or the spin's end). */
+	private static final int FINISH_BLEND = 4;
 	public static final int ACTION_NONE = 0;
 	public static final int ACTION_SKILL = 1;
 	public static final int ACTION_BURST = 2;
@@ -428,6 +432,8 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 	private boolean chargeHeld;
 	/** Server side, played as, for a character with no combo (plain punches): ticks until the next punch. */
 	private int punchCooldown;
+	/** Played as, X: her hits land on everything (animals too), not only monsters. Never villagers, golems or pets. */
+	public boolean pilotHitsAll;
 	/** Client side, on the client playing as her: sprint held, ticks of dash left, jump held (set each tick by its keys). */
 	public boolean pilotSprinting, pilotJump;
 	public int pilotDashTicks;
@@ -521,7 +527,8 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 
 	/** Client side: the weapon is in her hand (swinging, casting, or posing in the menu). */
 	public boolean showsWeaponInHand() {
-		return playingMove || menuShowsWeapon;
+		// The burst's glowing blade (Noelle's Sweeping Time) keeps her weapon out for as long as it lasts.
+		return playingMove || menuShowsWeapon || weaponAuraActive();
 	}
 
 	/** Seconds the claymore keeps hovering behind her after a fight before she dismisses it. */
@@ -634,11 +641,12 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 				}
 			}
 			default -> {
-				if (chargeTicks == charged.finishImpact()) {
+				// The finish starts after its short blend in, so its hit and its end come that much later.
+				if (chargeTicks == charged.finishImpact() + FINISH_BLEND) {
 					chargedHit(finishHitDamage(), 1.25, 0.8F);
 					onChargedHit(true);
 				}
-				if (chargeTicks >= charged.finishTicks()) {
+				if (chargeTicks >= charged.finishTicks() + FINISH_BLEND) {
 					chargeStage = 0;
 				}
 			}
@@ -651,8 +659,7 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 		float damage = (float) getAttributeValue(Attributes.ATTACK_DAMAGE) * share;
 		double reach = meleeReach() * meleeReachScale() * reachScale;
 		for (LivingEntity near : level().getEntitiesOfClass(LivingEntity.class, getBoundingBox().inflate(reach + 1.0, 1.0, reach + 1.0),
-				e -> e != this && e instanceof Enemy && e.isAlive() && !(e instanceof TamableAnimal pet && pet.isTame())
-						&& distanceTo(e) <= reach + e.getBbWidth() / 2.0)) {
+				e -> isFoe(e) && distanceTo(e) <= reach + e.getBbWidth() / 2.0)) {
 			if (near.hurt(damageSources().mobAttack(this), damage)) {
 				near.knockback(knockback, getX() - near.getX(), getZ() - near.getZ());
 			}
@@ -787,7 +794,7 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 				comboCount = (comboCount + 1) & 0xFFFFF;
 				entityData.set(COMBO, comboCount << 3 | COMBO_END_PHASE);
 			} else {
-				comboWindowTicks = COMBO_WINDOW_TICKS;
+				comboWindowTicks = PLAY_COMBO_WINDOW_TICKS;
 			}
 		} else if (comboPieceTicks > 0 && --comboPieceTicks == 0) {
 			LivingEntity next = comboFoe(0.0);
@@ -875,8 +882,8 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 		}
 		float damage = (float) getAttributeValue(Attributes.ATTACK_DAMAGE);
 		double reach = meleeReach() * meleeReachScale() + 1.0;
-		for (Mob mob : level().getEntitiesOfClass(Mob.class, getBoundingBox().inflate(reach), mob -> mob != primary && mob.isAlive()
-				&& mob instanceof Enemy && !(mob instanceof TamableAnimal tame && tame.isTame()) && inMeleeReach(mob, 0.5))) {
+		for (Mob mob : level().getEntitiesOfClass(Mob.class, getBoundingBox().inflate(reach), mob -> mob != primary && isFoe(mob)
+				&& inMeleeReach(mob, 0.5))) {
 			double angle = Mth.atan2(mob.getZ() - getZ(), mob.getX() - getX()) * Mth.RAD_TO_DEG - 90.0;
 			float yaw = attackYaw();
 			if (Math.abs(Mth.wrapDegrees(angle - yaw)) <= arc / 2 && mob.hurt(damageSources().mobAttack(this), damage)) {
@@ -1036,6 +1043,12 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 	 * tick). Driven faster, they play faster to match, so her feet and arms keep pace with the ground.
 	 */
 	private static final float OWN_JOG_PACE = 0.167F, OWN_DASH_PACE = 0.303F;
+	/**
+	 * Played as, each hit's step: a quick lunge at the start of the swing, about 1 block (5 ticks of push from
+	 * standing, plus the glide after, covers about 11 times this speed on normal ground).
+	 */
+	private static final int PLAY_STEP_TICKS = 5;
+	private static final float PLAY_STEP_SPEED = 0.091F;
 	/** How fast she turns to face where your keys send her (degrees per tick). */
 	private static final float PLAY_TURN = 45.0F;
 
@@ -1164,8 +1177,7 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 	private LivingEntity foeInFront(double arc) {
 		float yaw = attackYaw();
 		double reach = meleeReach() * meleeReachScale() + 1.0;
-		return level().getEntitiesOfClass(Mob.class, getBoundingBox().inflate(reach), mob -> mob instanceof Enemy && mob.isAlive()
-						&& !(mob instanceof TamableAnimal tame && tame.isTame()) && inMeleeReach(mob, 0.5)
+		return level().getEntitiesOfClass(Mob.class, getBoundingBox().inflate(reach), mob -> isFoe(mob) && inMeleeReach(mob, 0.5)
 						&& Math.abs(Mth.wrapDegrees(Mth.atan2(mob.getZ() - getZ(), mob.getX() - getX()) * Mth.RAD_TO_DEG - 90.0 - yaw)) <= arc / 2)
 				.stream().min(java.util.Comparator.comparingDouble(this::distanceToSqr)).orElse(null);
 	}
@@ -1208,12 +1220,40 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 		useBurst(getTarget());
 	}
 
-	/** Played as, a dash or a jump: cuts the hit she's in short (its damage too, if it hadn't landed); the combo restarts. */
+	/**
+	 * Played as, a dash or a jump (or walking off a held pose): cuts short the hit she's in (its damage too, if it
+	 * hadn't landed), her ending, or any part of the charged attack; the combo restarts. Skill and burst can't be cut.
+	 */
 	public void playerCancel() {
-		if (isPlayed() && (comboPieceTicks > 0 || comboWindowTicks > 0 || comboEndTicks > 0)) {
+		if (!isPlayed()) {
+			return;
+		}
+		if (comboPieceTicks > 0 || comboWindowTicks > 0 || comboEndTicks > 0) {
 			queuedAttack = 0;
 			resetCombo();
 		}
+		if (chargeStage != 0) {
+			chargeStage = 0;
+			chargeHeld = false;
+			entityData.set(CHARGE, 0);
+		}
+	}
+
+	/**
+	 * Whom her hits land on: monsters (not tamed ones), and, while you play as her with X on, every other creature
+	 * too. Never players, companions, villagers and traders, golems or tamed animals and horses.
+	 */
+	public boolean isFoe(Entity e) {
+		if (e == this || !(e instanceof LivingEntity living) || !living.isAlive() || e instanceof Player || e instanceof CompanionEntity
+				|| e instanceof TamableAnimal pet && pet.isTame()) {
+			return false;
+		}
+		if (e instanceof Enemy) {
+			return true;
+		}
+		return pilotHitsAll && isPlayed() && e instanceof Mob && !(e instanceof net.minecraft.world.entity.npc.Npc)
+				&& !(e instanceof net.minecraft.world.entity.animal.AbstractGolem)
+				&& !(e instanceof net.minecraft.world.entity.animal.horse.AbstractHorse horse && horse.isTamed());
 	}
 
 	/** Game tests: where the charged attack is (0 none, 1 wind-up, 2 spin, 3 finish) and which hit comes next. */
@@ -1263,6 +1303,11 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 		return pilotHitTicks == 0 && (entityData.get(COMBO) & 7) != 0;
 	}
 
+	/** Client side, played as: in any part of the charged attack. */
+	public boolean pilotCharging() {
+		return entityData.get(CHARGE) != 0;
+	}
+
 	/** Client side, played as: you just cut the hit short (dash, jump, skill, charge): free to move at once. */
 	public void pilotCancelLocal() {
 		pilotHitTicks = 0;
@@ -1294,8 +1339,8 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 			if (phase >= 1 && phase <= comboHits().size()) {
 				ComboHit hit = comboHits().get(phase - 1);
 				pilotHitTicks = comboTicks(hit.length());
-				pilotStepTicks = Math.max(1, (int) Math.ceil(hit.motionEnd() / comboSpeed() * 20));
-				pilotStepSpeed = (float) (comboTravel() / pilotStepTicks / GROUND);
+				pilotStepTicks = Math.min(PLAY_STEP_TICKS, pilotHitTicks);
+				pilotStepSpeed = PLAY_STEP_SPEED;
 			} else {
 				pilotCancelLocal();
 			}
@@ -1790,9 +1835,13 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 			ChargedAttack charged = chargedAttack();
 			if (charge != 0 && charged != null && action == ACTION_NONE) {
 				if (charge != chargeShown) {
-					// Into the wind-up over 2 ticks; wind-up to spin to finish at once (each starts where the last ends).
+					// Into the wind-up over 2 ticks; wind-up to spin at once (it starts where the wind-up ends); into the
+					// finish over FINISH_BLEND (its first frame doesn't match), from the spin's pose counted within one turn.
 					state.getController().setAnimationSpeed(1.0);
-					state.getController().setTransitionLength(chargeShown == 0 ? 2 : 0);
+					if (charge == CHARGE_FINISH) {
+						unwindSnapshots();
+					}
+					state.getController().setTransitionLength(chargeShown == 0 ? 2 : charge == CHARGE_FINISH ? FINISH_BLEND : 0);
 					if (chargeShown == 0) {
 						state.getController().forceAnimationReset();
 					}
@@ -1982,7 +2031,10 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 			controller.forceAnimationReset();
 			return state.setAndContinue(animation);
 		}
-		boolean done = !state.isCurrentAnimation(animation) || controller.hasAnimationFinished();
+		// A hit holds its last frame (GeckoLib pauses there rather than stopping): that counts as done, so walking takes
+		// over from a held pose instead of her sliding along in it.
+		boolean done = !state.isCurrentAnimation(animation) || controller.hasAnimationFinished()
+				|| controller.getAnimationState() == AnimationController.State.PAUSED;
 		if (phase == COMBO_END_PHASE ? done : (done && state.isMoving()) || !state.isCurrentAnimation(animation)) {
 			return null;
 		}

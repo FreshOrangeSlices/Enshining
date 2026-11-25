@@ -64,6 +64,7 @@ public final class PlayAsClient {
 	public static final KeyMapping SKILL = key("skill", GLFW.GLFW_KEY_E);
 	public static final KeyMapping BURST = key("burst", GLFW.GLFW_KEY_Q);
 	public static final KeyMapping INTERACT = key("interact", GLFW.GLFW_KEY_F);
+	public static final KeyMapping TARGETS = key("targets", GLFW.GLFW_KEY_X);
 	public static final KeyMapping[] PARTY = {key("party_1", GLFW.GLFW_KEY_1), key("party_2", GLFW.GLFW_KEY_2),
 			key("party_3", GLFW.GLFW_KEY_3), key("party_4", GLFW.GLFW_KEY_4)};
 
@@ -81,8 +82,12 @@ public final class PlayAsClient {
 	private static int dashTicks;
 	private static boolean sprintWas;
 	private static int lastDash = -1000;
-	/** Left click: held this many ticks becomes the charged attack (a shorter press is a normal hit). */
-	private static final int CHARGE_HOLD = 6;
+	/** Left click: a press is a hit at once; still held after this many ticks (half a second), it's the charged attack. */
+	private static final int CHARGE_HOLD = 10;
+	/** X: her hits land on everything (animals too), not only monsters. Kept between times you play her. */
+	private static boolean hitsAll;
+	/** An attack, skill or burst ends the sprint: let go of Shift and press it again to sprint again (Genshin's). */
+	private static boolean sprintBlocked;
 	private static int attackHeld;
 	private static boolean charging;
 	private static boolean jumpWas;
@@ -97,7 +102,7 @@ public final class PlayAsClient {
 	}
 
 	static List<KeyMapping> keys() {
-		List<KeyMapping> all = new ArrayList<>(List.of(HOP_OUT, SPRINT, ATTACK, SKILL, BURST, INTERACT));
+		List<KeyMapping> all = new ArrayList<>(List.of(HOP_OUT, SPRINT, ATTACK, SKILL, BURST, INTERACT, TARGETS));
 		all.addAll(Arrays.asList(PARTY));
 		return all;
 	}
@@ -171,6 +176,7 @@ public final class PlayAsClient {
 		if (on && !wasInControl) {
 			cameraBefore = mc.options.getCameraType();
 			lastFlags = -1;
+			PlayNetwork.toServer(new PlayNetwork.Action(hitsAll ? PlayNetwork.Action.HITS_ALL : PlayNetwork.Action.HITS_HOSTILE));
 		} else if (!on && wasInControl) {
 			mc.options.setCameraType(cameraBefore);
 			dashTicks = 0;
@@ -199,8 +205,12 @@ public final class PlayAsClient {
 		}
 		if (player.getVehicle() instanceof CompanionEntity companion) {
 			boolean moving = Math.abs(player.zza) > 1.0E-3F || Math.abs(player.xxa) > 1.0E-3F;
-			boolean sprint = !screenOpen && down(SPRINT) && moving;
+			companion.pilotHitsAll = hitsAll;
 			fight(mc, player, companion, screenOpen, moving);
+			if (!down(SPRINT)) {
+				sprintBlocked = false;
+			}
+			boolean sprint = !screenOpen && down(SPRINT) && moving && !sprintBlocked;
 			if (sprint && !sprintWas) {
 				// Genshin's dash, once a second at most (stamina will limit it later). It cuts a hit short.
 				if (player.tickCount - lastDash >= DASH_COOLDOWN || player.tickCount < lastDash) {
@@ -234,8 +244,15 @@ public final class PlayAsClient {
 	private static void fight(Minecraft mc, LocalPlayer player, CompanionEntity companion, boolean screenOpen, boolean moving) {
 		boolean attack = !screenOpen && down(ATTACK);
 		if (attack) {
+			if (attackHeld == 0) {
+				// The hit comes out the moment you press.
+				aim(player, companion);
+				sprintBlocked = true;
+				PlayNetwork.toServer(new PlayNetwork.Action(PlayNetwork.Action.ATTACK));
+			}
 			attackHeld++;
 			if (!charging && attackHeld == CHARGE_HOLD) {
+				// Still held: the charged attack (it cuts that hit short, so the combo starts over).
 				charging = true;
 				aim(player, companion);
 				companion.pilotCancelLocal();
@@ -244,21 +261,26 @@ public final class PlayAsClient {
 		} else if (attackHeld > 0) {
 			if (charging) {
 				PlayNetwork.toServer(new PlayNetwork.Action(PlayNetwork.Action.CHARGE_END));
-			} else {
-				aim(player, companion);
-				PlayNetwork.toServer(new PlayNetwork.Action(PlayNetwork.Action.ATTACK));
 			}
 			attackHeld = 0;
 			charging = false;
 		}
 		if (pressed(SKILL, screenOpen)) {
+			sprintBlocked = true;
 			companion.pilotCancelLocal();
 			PlayNetwork.toServer(new PlayNetwork.Action(PlayNetwork.Action.SKILL));
 		}
 		if (pressed(BURST, screenOpen)) {
 			aim(player, companion);
+			sprintBlocked = true;
 			companion.pilotCancelLocal();
 			PlayNetwork.toServer(new PlayNetwork.Action(PlayNetwork.Action.BURST));
+		}
+		if (pressed(TARGETS, screenOpen)) {
+			hitsAll = !hitsAll;
+			companion.pilotHitsAll = hitsAll;
+			PlayNetwork.toServer(new PlayNetwork.Action(hitsAll ? PlayNetwork.Action.HITS_ALL : PlayNetwork.Action.HITS_HOSTILE));
+			player.displayClientMessage(Component.translatable(hitsAll ? "enshining.play.hits_all" : "enshining.play.hits_hostile"), true);
 		}
 		if (pressed(INTERACT, screenOpen)) {
 			PlayNetwork.toServer(new PlayNetwork.Action(PlayNetwork.Action.INTERACT));
@@ -276,9 +298,9 @@ public final class PlayAsClient {
 		}
 	}
 
-	/** Cut her hit (or held pose, or ending) short: the combo starts over at hit 1. */
+	/** Cut her hit (or held pose, her ending, or charged attack) short: the combo starts over at hit 1. */
 	private static void cancel(CompanionEntity companion) {
-		if (companion.pilotInHit() || companion.pilotHolding()) {
+		if (companion.pilotInHit() || companion.pilotHolding() || companion.pilotCharging()) {
 			companion.pilotCancelLocal();
 			PlayNetwork.toServer(new PlayNetwork.Action(PlayNetwork.Action.CANCEL));
 		}
@@ -292,8 +314,7 @@ public final class PlayAsClient {
 		float camera = player.getYRot();
 		Entity best = null;
 		double bestDistance = Double.MAX_VALUE;
-		for (Entity e : companion.level().getEntities(companion, companion.getBoundingBox().inflate(5.0),
-				e -> e instanceof net.minecraft.world.entity.monster.Enemy && e.isAlive())) {
+		for (Entity e : companion.level().getEntities(companion, companion.getBoundingBox().inflate(5.0), companion::isFoe)) {
 			double yaw = Mth.atan2(e.getZ() - companion.getZ(), e.getX() - companion.getX()) * Mth.RAD_TO_DEG - 90.0;
 			double distance = companion.distanceToSqr(e);
 			if (Math.abs(Mth.wrapDegrees(yaw - camera)) <= 60.0 && distance < bestDistance && distance <= 25.0) {

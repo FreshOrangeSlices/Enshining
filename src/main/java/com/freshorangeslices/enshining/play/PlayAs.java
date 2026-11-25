@@ -44,6 +44,7 @@ public final class PlayAs {
 		int fallenTicks;
 		int cooldown;
 		boolean sprint, moving, dash;
+		boolean hitsAll;   // X: her hits land on animals too
 
 		Session(ServerPlayer player) {
 			this.player = player;
@@ -171,6 +172,10 @@ public final class PlayAs {
 	/** One of her moves from your keys (left click, hold and let go, E, Q, a cancel, F). */
 	public static void move(ServerPlayer player, byte action) {
 		Session session = SESSIONS.get(player.getUUID());
+		if (session != null && (action == PlayNetwork.Action.HITS_ALL || action == PlayNetwork.Action.HITS_HOSTILE)) {
+			session.hitsAll = action == PlayNetwork.Action.HITS_ALL;
+			return;
+		}
 		CompanionEntity active = session == null || session.fallenTicks > 0 ? null : active(session);
 		if (active == null || player.getVehicle() != active) {
 			return;
@@ -306,6 +311,7 @@ public final class PlayAs {
 				continue;
 			}
 			active.pilotRunning = session.sprint && session.moving;
+			active.pilotHitsAll = session.hitsAll;
 			active.pilotDashing = active.pilotRunning && session.dash;
 			for (UUID id : session.party) {
 				CompanionEntity member = member(player, id);

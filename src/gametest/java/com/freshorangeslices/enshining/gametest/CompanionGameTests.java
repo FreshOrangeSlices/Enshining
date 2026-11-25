@@ -177,6 +177,46 @@ public final class CompanionGameTests {
 		helper.succeed();
 	}
 
+	@GameTest(template = "empty")
+	public static void xChoosesWhatHerHitsLandOn(GameTestHelper helper) {
+		ServerPlayer player = player(helper);
+		NoelleEntity noelle = playedNoelle(helper, player);
+		var husk = helper.spawn(EntityType.HUSK, new BlockPos(1, 2, 4));
+		var pig = helper.spawn(EntityType.PIG, new BlockPos(3, 2, 4));
+		var villager = helper.spawn(EntityType.VILLAGER, new BlockPos(2, 2, 5));
+		helper.assertTrue(noelle.isFoe(husk) && !noelle.isFoe(pig) && !noelle.isFoe(villager), "Monsters only, to start");
+		noelle.pilotHitsAll = true;
+		helper.assertTrue(noelle.isFoe(husk) && noelle.isFoe(pig), "X: animals too");
+		helper.assertFalse(noelle.isFoe(villager) || noelle.isFoe(player), "Never villagers or players");
+		PlayAs.hopOut(player);
+		helper.assertFalse(noelle.isFoe(pig), "Back on her own, she never hits animals");
+		helper.succeed();
+	}
+
+	@GameTest(template = "empty")
+	public static void aDashCutsTheChargedAttack(GameTestHelper helper) {
+		ServerPlayer player = player(helper);
+		NoelleEntity noelle = playedNoelle(helper, player);
+		noelle.playerChargeBegin();
+		helper.assertTrue(noelle.chargeStageForTests() == 1, "Winding up");
+		noelle.playerCancel();
+		helper.assertTrue(noelle.chargeStageForTests() == 0, "A dash cuts the charged attack");
+		helper.succeed();
+	}
+
+	@GameTest(template = "empty", timeoutTicks = 120)
+	public static void playedComboWaitsFourSeconds(GameTestHelper helper) {
+		ServerPlayer player = player(helper);
+		NoelleEntity noelle = playedNoelle(helper, player);
+		noelle.playerAttack();
+		// Hit 1 lasts about 17 ticks; 2.5 s after it, the 4 s window still holds her place.
+		helper.runAfterDelay(17 + 50, () -> {
+			noelle.playerAttack();
+			helper.assertTrue(noelle.comboNextForTests() == 2, "The next click is hit 2: " + noelle.comboNextForTests());
+			helper.succeed();
+		});
+	}
+
 	@GameTest(template = "empty", timeoutTicks = 100)
 	public static void whenSheFallsStevePopsOutTwoSecondsLater(GameTestHelper helper) {
 		NoelleEntity noelle = noelle(helper);

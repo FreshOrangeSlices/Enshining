@@ -45,5 +45,8 @@
   "key.enshining.attack": "Attack (hold: charged attack)",
   "key.enshining.skill": "Elemental skill",
   "key.enshining.burst": "Elemental burst",
-  "key.enshining.interact": "Interact (doors, levers, chests)"
+  "key.enshining.interact": "Interact (doors, levers, chests)",
+  "key.enshining.targets": "What her hits land on (monsters / everything)",
+  "enshining.play.hits_all": "Her hits land on everything (never villagers, golems or pets)",
+  "enshining.play.hits_hostile": "Her hits land on monsters only"
 }
