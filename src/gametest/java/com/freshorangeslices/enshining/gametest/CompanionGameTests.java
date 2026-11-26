@@ -185,12 +185,50 @@ public final class CompanionGameTests {
 		var pig = helper.spawn(EntityType.PIG, new BlockPos(3, 2, 4));
 		var villager = helper.spawn(EntityType.VILLAGER, new BlockPos(2, 2, 5));
 		helper.assertTrue(noelle.isFoe(husk) && !noelle.isFoe(pig) && !noelle.isFoe(villager), "Monsters only, to start");
-		noelle.pilotHitsAll = true;
-		helper.assertTrue(noelle.isFoe(husk) && noelle.isFoe(pig), "X: animals too");
-		helper.assertFalse(noelle.isFoe(villager) || noelle.isFoe(player), "Never villagers or players");
-		PlayAs.hopOut(player);
-		helper.assertFalse(noelle.isFoe(pig), "Back on her own, she never hits animals");
-		helper.succeed();
+		PlayAs.targets(player, CompanionEntity.TARGETS_NOT_FRIENDLY);
+		helper.runAfterDelay(1, () -> {
+			helper.assertTrue(noelle.isFoe(husk) && noelle.isFoe(pig), "X once: animals too");
+			helper.assertFalse(noelle.isFoe(villager) || noelle.isFoe(player), "But not friendlies or players");
+			PlayAs.targets(player, CompanionEntity.TARGETS_EVERYTHING);
+			helper.runAfterDelay(1, () -> {
+				helper.assertTrue(noelle.isFoe(husk) && noelle.isFoe(pig) && noelle.isFoe(villager), "X twice: everything");
+				helper.assertFalse(noelle.isFoe(player), "Never players");
+				PlayAs.hopOut(player);
+				helper.assertFalse(noelle.isFoe(pig) || noelle.isFoe(villager), "Back on her own, monsters only");
+				helper.succeed();
+			});
+		});
+	}
+
+	@GameTest(template = "empty", timeoutTicks = 60)
+	public static void aClickMidHitWaitsForThatHitToLand(GameTestHelper helper) {
+		ServerPlayer player = player(helper);
+		NoelleEntity noelle = playedNoelle(helper, player);
+		noelle.playerAttack();
+		// Mashing: a second click right away is kept (hit 1 swings through, about 15 ticks), then hit 2 follows.
+		helper.runAfterDelay(2, () -> {
+			noelle.playerAttack();
+			helper.assertTrue(noelle.comboNextForTests() == 1, "Hit 1 isn't cut short");
+		});
+		helper.runAfterDelay(21, () -> {
+			helper.assertTrue(noelle.comboNextForTests() == 2, "The kept click became hit 2: " + noelle.comboNextForTests());
+			helper.succeed();
+		});
+	}
+
+	@GameTest(template = "empty")
+	public static void onlyTheDashGivesIFramesNotTheSprint(GameTestHelper helper) {
+		ServerPlayer player = player(helper);
+		NoelleEntity noelle = playedNoelle(helper, player);
+		PlayAs.input(player, true, true, true, false);
+		helper.runAfterDelay(1, () -> {
+			helper.assertFalse(noelle.hurt(helper.getLevel().damageSources().generic(), 2.0F), "Dashing: i-frames");
+			PlayAs.input(player, true, true, false, false);
+			helper.runAfterDelay(1, () -> {
+				helper.assertTrue(noelle.hurt(helper.getLevel().damageSources().generic(), 2.0F), "Sprinting after it: no i-frames");
+				helper.succeed();
+			});
+		});
 	}
 
 	@GameTest(template = "empty")

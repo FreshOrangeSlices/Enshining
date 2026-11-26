@@ -48,7 +48,7 @@ public final class PlayNetwork {
 
 	/** Held movement keys that change how she moves: bit 1 sprint, bit 2 moving at all, bit 4 dashing. */
 	public record Input(byte flags) {
-		public static final byte SPRINT = 1, MOVING = 2, DASH = 4;
+		public static final byte SPRINT = 1, MOVING = 2, DASH = 4, WALK = 8;
 
 		void write(FriendlyByteBuf buf) {
 			buf.writeByte(flags);
@@ -61,15 +61,15 @@ public final class PlayNetwork {
 		void handle(Supplier<NetworkEvent.Context> context) {
 			ServerPlayer player = context.get().getSender();
 			if (player != null) {
-				PlayAs.input(player, (flags & SPRINT) != 0, (flags & MOVING) != 0, (flags & DASH) != 0);
+				PlayAs.input(player, (flags & SPRINT) != 0, (flags & MOVING) != 0, (flags & DASH) != 0, (flags & WALK) != 0);
 			}
 		}
 	}
 
-	/** A key press: hop out, switch to party slot {@code slot}, or one of her moves. */
+	/** A key press: hop out, switch to party slot {@code slot}, X (mode in {@code slot}), or one of her moves. */
 	public record Action(byte action, byte slot) {
 		public static final byte HOP_OUT = 0, SWITCH = 1, ATTACK = 2, CHARGE_BEGIN = 3, CHARGE_END = 4, SKILL = 5, BURST = 6,
-				CANCEL = 7, INTERACT = 8, HITS_ALL = 9, HITS_HOSTILE = 10;
+				CANCEL = 7, INTERACT = 8, TARGETS = 9;
 
 		public Action(byte action) {
 			this(action, (byte) 0);
@@ -92,6 +92,7 @@ public final class PlayNetwork {
 			switch (action) {
 				case HOP_OUT -> PlayAs.hopOut(player);
 				case SWITCH -> PlayAs.switchTo(player, slot);
+				case TARGETS -> PlayAs.targets(player, slot);
 				default -> PlayAs.move(player, action);
 			}
 		}

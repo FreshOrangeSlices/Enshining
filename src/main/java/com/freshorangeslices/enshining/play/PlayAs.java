@@ -43,8 +43,8 @@ public final class PlayAs {
 		int active;
 		int fallenTicks;
 		int cooldown;
-		boolean sprint, moving, dash;
-		boolean hitsAll;   // X: her hits land on animals too
+		boolean sprint, moving, dash, walk;
+		int targets;   // X: what her hits land on (CompanionEntity.TARGETS_ modes)
 
 		Session(ServerPlayer player) {
 			this.player = player;
@@ -172,10 +172,6 @@ public final class PlayAs {
 	/** One of her moves from your keys (left click, hold and let go, E, Q, a cancel, F). */
 	public static void move(ServerPlayer player, byte action) {
 		Session session = SESSIONS.get(player.getUUID());
-		if (session != null && (action == PlayNetwork.Action.HITS_ALL || action == PlayNetwork.Action.HITS_HOSTILE)) {
-			session.hitsAll = action == PlayNetwork.Action.HITS_ALL;
-			return;
-		}
 		CompanionEntity active = session == null || session.fallenTicks > 0 ? null : active(session);
 		if (active == null || player.getVehicle() != active) {
 			return;
@@ -206,12 +202,21 @@ public final class PlayAs {
 	}
 
 	/** The held keys that change how she moves (sprint, whether you're moving at all, and the dash). */
-	public static void input(ServerPlayer player, boolean sprint, boolean moving, boolean dash) {
+	public static void input(ServerPlayer player, boolean sprint, boolean moving, boolean dash, boolean walk) {
 		Session session = SESSIONS.get(player.getUUID());
 		if (session != null) {
 			session.sprint = sprint;
 			session.moving = moving;
 			session.dash = dash;
+			session.walk = walk;
+		}
+	}
+
+	/** X: what her hits land on (kept for the whole time you play, whoever you switch to). */
+	public static void targets(ServerPlayer player, int mode) {
+		Session session = SESSIONS.get(player.getUUID());
+		if (session != null) {
+			session.targets = Math.floorMod(mode, CompanionEntity.TARGETS_MODES);
 		}
 	}
 
@@ -310,9 +315,11 @@ public final class PlayAs {
 				finish(session);
 				continue;
 			}
-			active.pilotRunning = session.sprint && session.moving;
-			active.pilotHitsAll = session.hitsAll;
-			active.pilotDashing = active.pilotRunning && session.dash;
+			// Jogging is her default; Left Ctrl toggles walking; Left Shift dashes, and held, she sprints.
+			active.pilotRunning = session.moving && (!session.walk || session.sprint || session.dash);
+			active.pilotDashing = session.moving && session.dash;
+			active.pilotSprintHeld = session.moving && session.sprint;
+			active.pilotTargets = session.targets;
 			for (UUID id : session.party) {
 				CompanionEntity member = member(player, id);
 				if (member != null && member != active && member.isOffField()) {

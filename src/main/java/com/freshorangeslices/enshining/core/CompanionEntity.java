@@ -422,20 +422,25 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 	public final java.util.Map<String, Float> propScale = new java.util.HashMap<>();
 	public final java.util.Map<String, Integer> propPop = new java.util.HashMap<>();
 	public float weaponLastTime = -1.0F;
-	/** Server side, while someone plays as her: whether their keys have her running (sprint held and moving). */
+	/** Server side, while someone plays as her: whether she's moving faster than a walk (jogging is the default). */
 	public boolean pilotRunning;
-	/** Server side, while someone plays as her: whether they're dashing (their client times it). */
+	/** Server side, while someone plays as her: whether they're dashing (their client times it; i-frames). */
 	public boolean pilotDashing;
+	/** Server side, while someone plays as her: Left Shift held past the dash, so she keeps sprinting. */
+	public boolean pilotSprintHeld;
 	/** Server side, played as: a click that came while a hit was playing, kept this many ticks for when it can follow. */
 	private int queuedAttack;
 	/** Server side, played as: left click still held for the charged attack (let go: she finishes). */
 	private boolean chargeHeld;
 	/** Server side, played as, for a character with no combo (plain punches): ticks until the next punch. */
 	private int punchCooldown;
-	/** Played as, X: her hits land on everything (animals too), not only monsters. Never villagers, golems or pets. */
-	public boolean pilotHitsAll;
-	/** Client side, on the client playing as her: sprint held, ticks of dash left, jump held (set each tick by its keys). */
-	public boolean pilotSprinting, pilotJump;
+	/** Played as, X: what her hits land on, one of the TARGETS_ modes (see {@link #isFoe}). */
+	public int pilotTargets;
+	/**
+	 * Client side, on the client playing as her: Left Shift held (sprinting), walking toggled on (Left Ctrl), jump
+	 * held, and ticks of dash left (set each tick by its keys).
+	 */
+	public boolean pilotSprinting, pilotWalking, pilotJump;
 	public int pilotDashTicks;
 	/** When she was befriended (game time): her place in her owner's party. 0 for companions from before this. */
 	private long befriendedAt;
@@ -1033,9 +1038,12 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 
 	/**
 	 * Speeds while played as (before ground friction; on normal ground she covers {@link #GROUND} times this a tick):
-	 * a walk just under a player's, a jog faster than a player's sprint, and the dash (Left Shift), a burst.
+	 * the jog (her default, faster than a player's sprint), the walk (Left Ctrl toggles it, just under a player's
+	 * walk), the dash (a Left Shift press, a burst) and the sprint (Left Shift still held after the dash).
 	 */
-	private static final float PLAY_WALK = 0.09F, PLAY_JOG = 0.16F, PLAY_DASH = 0.24F;
+	private static final float PLAY_WALK = 0.09F, PLAY_JOG = 0.16F, PLAY_DASH = 0.24F, PLAY_SPRINT = 0.21F;
+	/** Played as, X: monsters only; everything but friendlies (villagers, golems, pets); everything. */
+	public static final int TARGETS_HOSTILE = 0, TARGETS_NOT_FRIENDLY = 1, TARGETS_EVERYTHING = 2, TARGETS_MODES = 3;
 	/** Ground covered per tick for each unit of speed, at full input, on normal blocks (1 / (1 - 0.6 * 0.91)). */
 	private static final float GROUND = 2.2026F;
 	/**
@@ -1115,7 +1123,10 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 		return entityData.get(ABILITIES) & 0xFF;
 	}
 
-	/** Played as, left click: her next hit (a click mid-hit is kept a moment and follows as soon as it can). */
+	/**
+	 * Played as, left click: her next hit. A click mid-hit is kept until that hit has landed and swung through, then
+	 * the next one follows (Genshin's: mashing never cuts her own hits short).
+	 */
 	public void playerAttack() {
 		if (!isPlayed() || chargeStage != 0 || actionTicks > 0) {
 			return;
@@ -1136,7 +1147,7 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 			queuedAttack = 0;
 			startPlayedHit();
 		} else {
-			queuedAttack = 8;
+			queuedAttack = Math.max(8, (comboPieceTicks > 0 ? comboCancelTicks : 0) + 4);
 		}
 	}
 
@@ -1240,18 +1251,25 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 	}
 
 	/**
-	 * Whom her hits land on: monsters (not tamed ones), and, while you play as her with X on, every other creature
-	 * too. Never players, companions, villagers and traders, golems or tamed animals and horses.
+	 * Whom her hits land on. On her own: monsters (not tamed ones). Played as, X picks: monsters only; everything but
+	 * friendlies (villagers and traders, golems, tamed animals and horses); or everything, friendlies too. Never
+	 * players, companions or armor stands.
 	 */
 	public boolean isFoe(Entity e) {
-		if (e == this || !(e instanceof LivingEntity living) || !living.isAlive() || e instanceof Player || e instanceof CompanionEntity
-				|| e instanceof TamableAnimal pet && pet.isTame()) {
+		if (e == this || !(e instanceof Mob mob) || !mob.isAlive() || e instanceof CompanionEntity) {
+			return false;
+		}
+		int targets = isPlayed() ? pilotTargets : TARGETS_HOSTILE;
+		if (targets == TARGETS_EVERYTHING) {
+			return true;
+		}
+		if (e instanceof TamableAnimal pet && pet.isTame()) {
 			return false;
 		}
 		if (e instanceof Enemy) {
 			return true;
 		}
-		return pilotHitsAll && isPlayed() && e instanceof Mob && !(e instanceof net.minecraft.world.entity.npc.Npc)
+		return targets == TARGETS_NOT_FRIENDLY && !(e instanceof net.minecraft.world.entity.npc.Npc)
 				&& !(e instanceof net.minecraft.world.entity.animal.AbstractGolem)
 				&& !(e instanceof net.minecraft.world.entity.animal.horse.AbstractHorse horse && horse.isTamed());
 	}
@@ -1386,7 +1404,7 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 		if (entityData.get(CHARGE) == CHARGE_SPIN) {
 			return PLAY_WALK * 0.3F;   // sneaking pace while she spins
 		}
-		float speed = pilotSprinting ? (pilotDashTicks > 0 ? PLAY_DASH : PLAY_JOG) : PLAY_WALK;
+		float speed = pilotDashTicks > 0 ? PLAY_DASH : pilotSprinting ? PLAY_SPRINT : pilotWalking ? PLAY_WALK : PLAY_JOG;
 		if (action() == ACTION_BURST) {
 			speed *= 0.5F;
 		}
@@ -1565,7 +1583,7 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 			return false;
 		}
 		// Dashing while you play as her: i-frames, like Genshin's dodge (not against the void or /kill).
-		if (getControllingPassenger() instanceof Player && entityData.get(DASHING)
+		if (getControllingPassenger() instanceof Player && pilotDashing
 				&& !source.is(net.minecraft.tags.DamageTypeTags.BYPASSES_INVULNERABILITY)) {
 			return false;
 		}
@@ -1649,8 +1667,9 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 		boolean running = piloted ? pilotRunning && !comboActive
 				: !comboActive && getNavigation().isInProgress() && getMoveControl().getSpeedModifier() >= 1.05;
 		if (piloted) {
-			// Your Left Shift times the dash (at most one a second, until there's stamina); the dash gives her i-frames.
-			dashTicks = running && pilotDashing ? 1 : 0;
+			// Your Left Shift times the dash (at most one a second, until there's stamina) and the sprint after it: both
+			// show her run (only the dash gives i-frames).
+			dashTicks = running && (pilotDashing || pilotSprintHeld) ? 1 : 0;
 		} else {
 			if (running && !isSprinting() && calmTicks >= DASH_AFTER_CALM) {
 				dashTicks = DASH_TICKS;
@@ -1903,8 +1922,9 @@ public abstract class CompanionEntity extends TamableAnimal implements GeoEntity
 					boolean dash = entityData.get(DASHING) || !hasAnimation("animation.companion.jog");
 					if (getControllingPassenger() instanceof Player) {
 						// Driven faster than she runs by herself: the cycle speeds up to match (steady while she
-						// keeps running, so GeckoLib's clock doesn't jump).
-						state.getController().setAnimationSpeed(dash ? PLAY_DASH * GROUND / OWN_DASH_PACE : PLAY_JOG * GROUND / OWN_JOG_PACE);
+						// keeps running, so GeckoLib's clock doesn't jump: the dash and the sprint after it share the
+						// sprint's pace).
+						state.getController().setAnimationSpeed(dash ? PLAY_SPRINT * GROUND / OWN_DASH_PACE : PLAY_JOG * GROUND / OWN_JOG_PACE);
 					}
 					return state.setAndContinue(dash ? RUN : JOG);
 				}

@@ -37,7 +37,7 @@
   "enshining.play.started": "You are %s. Press %s to hop out.",
   "key.categories.enshining": "Enshining: playing as a companion",
   "key.enshining.hop_out": "Hop out",
-  "key.enshining.sprint": "Sprint (dash, then jog)",
+  "key.enshining.sprint": "Sprint (tap: dash; hold: keep sprinting)",
   "key.enshining.party_1": "Party member 1",
   "key.enshining.party_2": "Party member 2",
   "key.enshining.party_3": "Party member 3",
@@ -46,7 +46,11 @@
   "key.enshining.skill": "Elemental skill",
   "key.enshining.burst": "Elemental burst",
   "key.enshining.interact": "Interact (doors, levers, chests)",
-  "key.enshining.targets": "What her hits land on (monsters / everything)",
-  "enshining.play.hits_all": "Her hits land on everything (never villagers, golems or pets)",
-  "enshining.play.hits_hostile": "Her hits land on monsters only"
+  "key.enshining.targets": "What her hits land on (monsters / all but friendlies / everything)",
+  "enshining.play.hits_hostile": "Her hits land on monsters only",
+  "key.enshining.walk": "Walk / jog (toggle)",
+  "enshining.play.hits_not_friendly": "Her hits land on everything but friendlies (villagers, golems, pets)",
+  "enshining.play.hits_everything": "Her hits land on everything, friendlies too",
+  "enshining.play.walking": "Walking",
+  "enshining.play.jogging": "Jogging"
 }

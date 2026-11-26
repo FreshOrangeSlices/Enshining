@@ -59,6 +59,7 @@ public final class PlayAsClient {
 
 	public static final KeyMapping HOP_OUT = key("hop_out", GLFW.GLFW_KEY_J);
 	public static final KeyMapping SPRINT = key("sprint", GLFW.GLFW_KEY_LEFT_SHIFT);
+	public static final KeyMapping WALK = key("walk", GLFW.GLFW_KEY_LEFT_CONTROL);
 	public static final KeyMapping ATTACK = new KeyMapping("key.enshining.attack", WHILE_PLAYING, InputConstants.Type.MOUSE,
 			GLFW.GLFW_MOUSE_BUTTON_LEFT, CATEGORY);
 	public static final KeyMapping SKILL = key("skill", GLFW.GLFW_KEY_E);
@@ -84,8 +85,16 @@ public final class PlayAsClient {
 	private static int lastDash = -1000;
 	/** Left click: a press is a hit at once; still held after this many ticks (half a second), it's the charged attack. */
 	private static final int CHARGE_HOLD = 10;
-	/** X: her hits land on everything (animals too), not only monsters. Kept between times you play her. */
-	private static boolean hitsAll;
+	/** X: what her hits land on (monsters only, everything but friendlies, everything). Kept between times you play her. */
+	private static int targets = CompanionEntity.TARGETS_HOSTILE;
+	/** Left Ctrl: walking instead of her default jog (Genshin's toggle). Kept between times you play her. */
+	private static boolean walking;
+	/**
+	 * When you last clicked: for this long, until the server's answer shows, walking doesn't count as walking off her
+	 * held pose (else the cancel would chase the click and cut the new hit before it lands).
+	 */
+	private static int attackSentTick = -1000;
+	private static final int ATTACK_ANSWER_TICKS = 10;
 	/** An attack, skill or burst ends the sprint: let go of Shift and press it again to sprint again (Genshin's). */
 	private static boolean sprintBlocked;
 	private static int attackHeld;
@@ -102,7 +111,7 @@ public final class PlayAsClient {
 	}
 
 	static List<KeyMapping> keys() {
-		List<KeyMapping> all = new ArrayList<>(List.of(HOP_OUT, SPRINT, ATTACK, SKILL, BURST, INTERACT, TARGETS));
+		List<KeyMapping> all = new ArrayList<>(List.of(HOP_OUT, SPRINT, WALK, ATTACK, SKILL, BURST, INTERACT, TARGETS));
 		all.addAll(Arrays.asList(PARTY));
 		return all;
 	}
@@ -176,7 +185,7 @@ public final class PlayAsClient {
 		if (on && !wasInControl) {
 			cameraBefore = mc.options.getCameraType();
 			lastFlags = -1;
-			PlayNetwork.toServer(new PlayNetwork.Action(hitsAll ? PlayNetwork.Action.HITS_ALL : PlayNetwork.Action.HITS_HOSTILE));
+			PlayNetwork.toServer(new PlayNetwork.Action(PlayNetwork.Action.TARGETS, (byte) targets));
 		} else if (!on && wasInControl) {
 			mc.options.setCameraType(cameraBefore);
 			dashTicks = 0;
@@ -205,30 +214,35 @@ public final class PlayAsClient {
 		}
 		if (player.getVehicle() instanceof CompanionEntity companion) {
 			boolean moving = Math.abs(player.zza) > 1.0E-3F || Math.abs(player.xxa) > 1.0E-3F;
-			companion.pilotHitsAll = hitsAll;
+			companion.pilotTargets = targets;
 			fight(mc, player, companion, screenOpen, moving);
+			if (pressed(WALK, screenOpen)) {
+				walking = !walking;
+				player.displayClientMessage(Component.translatable(walking ? "enshining.play.walking" : "enshining.play.jogging"), true);
+			}
 			if (!down(SPRINT)) {
 				sprintBlocked = false;
 			}
+			// Genshin's moving: she jogs by default (Left Ctrl toggles a walk). A Left Shift press is a dash (it runs
+			// its course even on a tap; once a second at most until there's stamina; it cuts a hit short), and Shift
+			// still held after it, she sprints.
 			boolean sprint = !screenOpen && down(SPRINT) && moving && !sprintBlocked;
-			if (sprint && !sprintWas) {
-				// Genshin's dash, once a second at most (stamina will limit it later). It cuts a hit short.
-				if (player.tickCount - lastDash >= DASH_COOLDOWN || player.tickCount < lastDash) {
-					dashTicks = DASH_TICKS;
-					lastDash = player.tickCount;
-					cancel(companion);
-				}
-			} else if (!sprint) {
+			if (sprint && !sprintWas && (player.tickCount - lastDash >= DASH_COOLDOWN || player.tickCount < lastDash)) {
+				dashTicks = DASH_TICKS;
+				lastDash = player.tickCount;
+				cancel(companion);
+			} else if (!moving) {
 				dashTicks = 0;
 			} else if (dashTicks > 0) {
 				dashTicks--;
 			}
 			sprintWas = sprint;
 			companion.pilotSprinting = sprint;
+			companion.pilotWalking = walking;
 			companion.pilotDashTicks = dashTicks;
 			companion.pilotJump = !screenOpen && player.input.jumping;
 			byte flags = (byte) ((sprint ? PlayNetwork.Input.SPRINT : 0) | (moving ? PlayNetwork.Input.MOVING : 0)
-					| (dashTicks > 0 ? PlayNetwork.Input.DASH : 0));
+					| (dashTicks > 0 ? PlayNetwork.Input.DASH : 0) | (walking ? PlayNetwork.Input.WALK : 0));
 			if (flags != lastFlags) {
 				lastFlags = flags;
 				PlayNetwork.toServer(new PlayNetwork.Input(flags));
@@ -248,6 +262,7 @@ public final class PlayAsClient {
 				// The hit comes out the moment you press.
 				aim(player, companion);
 				sprintBlocked = true;
+				attackSentTick = player.tickCount;
 				PlayNetwork.toServer(new PlayNetwork.Action(PlayNetwork.Action.ATTACK));
 			}
 			attackHeld++;
@@ -277,10 +292,14 @@ public final class PlayAsClient {
 			PlayNetwork.toServer(new PlayNetwork.Action(PlayNetwork.Action.BURST));
 		}
 		if (pressed(TARGETS, screenOpen)) {
-			hitsAll = !hitsAll;
-			companion.pilotHitsAll = hitsAll;
-			PlayNetwork.toServer(new PlayNetwork.Action(hitsAll ? PlayNetwork.Action.HITS_ALL : PlayNetwork.Action.HITS_HOSTILE));
-			player.displayClientMessage(Component.translatable(hitsAll ? "enshining.play.hits_all" : "enshining.play.hits_hostile"), true);
+			targets = (targets + 1) % CompanionEntity.TARGETS_MODES;
+			companion.pilotTargets = targets;
+			PlayNetwork.toServer(new PlayNetwork.Action(PlayNetwork.Action.TARGETS, (byte) targets));
+			player.displayClientMessage(Component.translatable(switch (targets) {
+				case CompanionEntity.TARGETS_NOT_FRIENDLY -> "enshining.play.hits_not_friendly";
+				case CompanionEntity.TARGETS_EVERYTHING -> "enshining.play.hits_everything";
+				default -> "enshining.play.hits_hostile";
+			}), true);
 		}
 		if (pressed(INTERACT, screenOpen)) {
 			PlayNetwork.toServer(new PlayNetwork.Action(PlayNetwork.Action.INTERACT));
@@ -291,8 +310,11 @@ public final class PlayAsClient {
 		}
 		jumpWas = jump;
 		// Walking off while she holds a hit's pose or plays her ending: that's over (asked again at most every 5 ticks,
-		// while the server's answer is on its way).
-		if (moving && companion.pilotHolding() && (player.tickCount - holdingCancelSent >= 5 || player.tickCount < holdingCancelSent)) {
+		// while the server's answer is on its way). Not right after a click: her pose still shows until the new hit
+		// comes back, and cancelling then would cut that hit before it lands.
+		boolean hitOnItsWay = player.tickCount - attackSentTick < ATTACK_ANSWER_TICKS && player.tickCount >= attackSentTick;
+		if (moving && !hitOnItsWay && companion.pilotHolding()
+				&& (player.tickCount - holdingCancelSent >= 5 || player.tickCount < holdingCancelSent)) {
 			holdingCancelSent = player.tickCount;
 			cancel(companion);
 		}

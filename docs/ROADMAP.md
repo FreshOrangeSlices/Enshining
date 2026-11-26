@@ -178,6 +178,23 @@ Nothing here is built yet unless marked done. Order is roughly the order we'll d
   the user's Nov 24 file (all painted) is in as model v12. Their sit_idle (20 s, keys to 12 s) is cut into
   sit_idle_intro 0-12 s (plays once) and sit_idle = the 12 s pose held, until they give timestamps for the real split.
 
+### Update 2026-11-25 evening (the user's test of combat tuning)
+- Tested good: the full combo plays (hit 4's chop shows), F interact ("pretty cool").
+- Fixed: clicking while holding a move key cut her own hits (the client's "walked off the held pose" cancel went out
+  right behind the attack and reset the combo before the hit landed). Now no walk-off cancel for 10 ticks after a
+  click. Also: a click mid-hit is kept until that hit has landed and swung through (was 8 ticks), so mashing chains
+  1-2-3-4 instead of dropping clicks.
+- Moving like Genshin: jog is the default; Left Ctrl toggles walking; Left Shift press = dash (runs its 10 ticks even
+  on a tap, i-frames, once a second), still held = sprint 0.21 with the run animation (no i-frames). Both show the
+  run cycle at the sprint's pace (one speed, so GeckoLib's clock doesn't jump).
+- X now cycles three: monsters only / everything but friendlies (villagers, traders, golems, tamed pets and
+  horses) / everything (friendlies too). Never players, companions or armor stands.
+- Notes from the user: the back bow clips into her skirt; the skirt clips her legs often. Measured: legs swing up to
+  70-80 degrees in jog/run/attacks and her body leans 25-50 degrees in jog/run, while the skirt follows the legs only
+  up to 20 degrees and tilts with the body: the front panels go into her thighs. Code fix possible (skirt hangs
+  against the lean, follows the legs further); asked first.
+- Later ideas: a Genshin-style prompt ("Pick up / Open / Interact") when F would do something.
+
 ### Pinned: waiting on you
 - Menu pose jump: the cut times were right (`menu_armor` 0.42 s, `menu_weapon` 0.96 s); GeckoLib's own
   start-then-loop let her drop toward rest when the loop began. Fixed: the menu holds the start's last frame and
