@@ -195,6 +195,19 @@ Nothing here is built yet unless marked done. Order is roughly the order we'll d
   against the lean, follows the legs further); asked first.
 - Later ideas: a Genshin-style prompt ("Pick up / Open / Interact") when F would do something.
 
+### Mark 2 attempt (2026-11-26, branch `mark2` only; Mark 1 stays in the game, Mark 2 can be reset anytime)
+- Reference: the user's voxel concept sheet (blocky clothes and hair, flat colours, little painted detail).
+- Split: the user builds the model freely; Claude sorts the cubes into the skeleton, names the parts for the game's
+  systems (skirt, waist_extras, flow_, glow_, eye sheets, weapon grip), packs the texture (flat faces share palette
+  pixels, hidden faces dropped, same-colour neighbours merged) and brings the animations over.
+- Scale: built at double size (`docs/art/mark2/mark2_starter.bbmodel`, 64 tall), drawn at half size in game, so each
+  block is half a pixel: twice Mark 1's detail at Mark 1's height. Height in game is one number in the renderer
+  (1.20.1 has no scale attribute; it came in 1.20.5), chosen once she's in game; hitbox and camera follow.
+- Starter (`tools/make_mark2_starter.py`): the rig's 14 bones at 2x, see-through stand-in body, red joint markers,
+  all 21 animations (position keys doubled; checked frame-for-frame against Mark 1).
+- Build rules sent: rest pose (straight, arms down, facing north); pieces split at neck, shoulders, elbows, wrists,
+  waist, hips, knees; skirt apart from legs; locks and tails as their own pieces; flat face front for the sheets.
+
 ### Pinned: waiting on you
 - Menu pose jump: the cut times were right (`menu_armor` 0.42 s, `menu_weapon` 0.96 s); GeckoLib's own
   start-then-loop let her drop toward rest when the loop began. Fixed: the menu holds the start's last frame and
